@@ -16,13 +16,12 @@ const TeamSchema = new Schema({
     budget: {
         type: Number,
         required: true,
-        default: 10000000 // উদাহরণ: ডিফল্ট বাজেট ১ কোটি (টেস্টিংয়ের জন্য)
+        default: 10000000 
     },
     playersOwned: [
         {
-            // ভবিষ্যতে কেনা প্লেয়ারদের ID এখানে থাকবে
             type: Schema.Types.ObjectId,
-            ref: 'Player' // 'Player' মডেল (আমরা পরে তৈরি করবো)
+            ref: 'Player'
         }
     ]
 });
