@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+// --- সমাধান: JWT_SECRET সরাসরি হার্ডকোড করা হলো ---
 const JWT_SECRET = "your_secret_key_123"; // এই কী-টি server.js-এর সাথে মিলতে হবে
 
 module.exports = function(req, res, next) {
@@ -11,13 +12,13 @@ module.exports = function(req, res, next) {
     }
 
     try {
-        // 'Bearer ' লেখাটি বাদ দিয়ে শুধু টোকেনটি নিন
+        // 'Bearer ' লেখাটি বাদ দিয়ে শুধু টোকেনটি নিন
         const token = authHeader.split(' ')[1];
         
         // টোকেন ভেরিফাই (Verify) করুন
         const decoded = jwt.verify(token, JWT_SECRET);
         
-        // ভেরিফাই সফল হলে, ইউজারের তথ্য রিকোয়েস্টের সাথে যোগ করুন
+        // ভেরিফাই সফল হলে, ইউজারের তথ্য রিকোয়েস্টের সাথে যোগ করুন
         req.user = decoded.user;
         next(); // পরবর্তী ধাপে (protected route) যেতে দিন
 
