@@ -8,10 +8,10 @@ const TeamSchema = new Schema({
         unique: true
     },
     owner: {
-        type: Schema.Types.ObjectId, // যে ইউজার এই টিমের মালিক
-        ref: 'User', // 'User' মডেলের সাথে লিঙ্ক
+        type: Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
-        unique: true // একজন ইউজার শুধু একটি টিমের মালিক হতে পারবে
+        unique: true
     },
     budget: {
         type: Number,
