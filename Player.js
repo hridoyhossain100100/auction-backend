@@ -2,26 +2,29 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const PlayerSchema = new Schema({
-    // --- সেল্ফ-রেজিস্ট্রেশন প্লেয়ারদের জন্য ---
     playerName: {
         type: String,
         required: true,
         unique: true 
     },
+    discordUsername: { // --- নতুন ফিল্ড ---
+        type: String,
+        required: true
+    },
     category: {
         type: String,
         required: true,
-        enum: ['Batsman', 'Bowler', 'All-Rounder', 'Unassigned'] // Unassigned যোগ করা হলো
+        enum: ['Batsman', 'Bowler', 'All-Rounder', 'Unassigned'],
+        default: 'Unassigned'
     },
-    isSelfRegistered: { // এই প্লেয়ার কি নিজে রেজিস্টার করেছে?
+    isSelfRegistered: {
         type: Boolean,
         default: true
     },
-    // -------------------------------------
     basePrice: {
         type: Number,
-        required: true,
-        default: 0
+        required: false, // --- পরিবর্তন: এখন বেস প্রাইস ঐচ্ছিক ---
+        default: 100 // ডিফল্ট বেস প্রাইস সেট করা হলো
     },
     currentPrice: {
         type: Number,
@@ -60,13 +63,12 @@ const PlayerSchema = new Schema({
             }
         }
     ],
-    createdBy: { // এখন এটি অ্যাডমিন হতে পারে, অথবা প্লেয়ারের User ID
+    createdBy: {
         type: Schema.Types.ObjectId,
         ref: 'User',
     },
-    // --- নতুন: রেজিস্ট্রেশন টাইমলাইন ---
     registrationDate: {
-        type: Date, // কখন প্লেয়ার রেজিস্টার করেছে
+        type: Date,
         default: Date.now
     }
 });
