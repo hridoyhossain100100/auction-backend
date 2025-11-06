@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs'); // 'bcryptjs' ব্যবহার করা হচ্ছে
+const bcrypt = require('bcryptjs'); 
 const jwt = require('jsonwebtoken');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -13,23 +13,22 @@ const Team = require('./Team');
 const authMiddleware = require('./authMiddleware');
 
 const app = express();
-const PORT = 3000; // আপনি Render-এ এটি পরিবর্তন করতে পারেন
+const PORT = process.env.PORT || 3000; // Render-এর জন্য এটি ঠিক আছে
 
 // --- Socket.io সেটআপ ---
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
-// --- গ্লোবাল অকশন স্টেট (টাইমার ট্র্যাকিং) ---
+// --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
-// ---
 
 // --- সমাধান: URI এবং SECRET সরাসরি হার্ডকোড করা হলো ---
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
-const JWT_SECRET = "your_secret_key_123"; // এই কী-টি authMiddleware.js-এর সাথে মিলতে হবে
+const JWT_SECRET = "your_secret_key_123";
 
 // মিডলওয়্যার
-app.use(cors()); // Express API-এর জন্য CORS
+app.use(cors()); 
 app.use(express.json());
 
 // --- ডেটাবেস কানেকশন ---
@@ -38,7 +37,7 @@ mongoose.connect(MONGO_URI)
     .catch((error) => console.error('Error connecting to MongoDB:', error.message));
 
 // ---------------------------------
-// --- অকশন গেম লজিক (আপনার কোড) ---
+// --- অকশন গেম লজিক ---
 // ---------------------------------
 
 async function sellPlayer(playerId, adminTriggered = false) {
@@ -46,8 +45,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
         const player = await Player.findById(playerId).populate('bids.bidderTeam');
         if (!player || (player.status !== 'Ongoing' && player.status !== 'Pending')) return;
         
-        // টাইমার বন্ধ করুন
-        io.emit('timer_update', { player_id: player._id, time: 0 });
+        io.emit('timer_update', { player_id: player._id, time: 0 }); // টাইমার বন্ধ করুন
 
         let logMessage = '';
         if (player.bids.length === 0) {
@@ -85,7 +83,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
         io.emit('players_updated');
         io.emit('teams_updated');
         io.emit('my_players_updated');
-        io.emit('auction_log', logMessage);
+        io.emit('auction_log', logMessage); // "SOLD" সাউন্ড এখানে ট্রিগার হবে
 
     } catch (error) {
         console.error("Sell Player Error:", error.message);
@@ -93,25 +91,19 @@ async function sellPlayer(playerId, adminTriggered = false) {
     }
 }
 
-// --- অকশন টাইমার "গেম লুপ" (আপনার কোড) ---
+// --- অকশন টাইমার "গেম লুপ" ---
 setInterval(async () => {
     try {
-        // ১. অকশন টাইমার চেক
         const ongoingPlayer = await Player.findOne({ status: 'Ongoing' });
-
         if (ongoingPlayer) {
             const timeLeft = Math.round((new Date(ongoingPlayer.auctionEndTime).getTime() - Date.now()) / 1000);
-
             if (timeLeft <= 0) {
-                // সময় শেষ, প্লেয়ার বিক্রি করুন
                 await sellPlayer(ongoingPlayer._id);
             } else {
-                // সময় আপডেট করুন
                 io.emit('timer_update', { player_id: ongoingPlayer._id, time: timeLeft });
             }
         }
 
-        // ২. রেজিস্ট্রেশন টাইমার চেক (আপনার কোড)
         if (playerRegistrationEndTime) {
             const regTimeLeft = Math.round((playerRegistrationEndTime.getTime() - Date.now()) / 1000);
             if (regTimeLeft > 0) {
@@ -122,24 +114,20 @@ setInterval(async () => {
                 io.emit('auction_log', "Player registration window has closed!");
             }
         }
-
     } catch (error) {
         console.error('Timer Loop Error:', error.message);
     }
 }, 1000);
 
 // ---------------------------------
-// --- API রুট (সমাধান করা) ---
+// --- API রুট ---
 // ---------------------------------
 
-// রুট: টেস্ট রুট (সার্ভার চলছে কিনা দেখার জন্য)
 app.get('/', (req, res) => {
     res.send('Auction Backend Server is running successfully!');
 });
 
-// --- Auth Routes (login.js-এর জন্য) ---
-
-// রুট: ইউজার রেজিস্ট্রেশন
+// --- Auth Routes ---
 app.post('/api/register', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -147,17 +135,14 @@ app.post('/api/register', async (req, res) => {
         if (user) {
             return res.status(400).json({ message: 'Username already exists.' });
         }
-        // পাসওয়ার্ড হ্যাশ করুন
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-
-        // অ্যাডমিন তৈরি করার একটি বেসিক লজিক (প্রথম ইউজারকে অ্যাডমিন বানানো)
         const isFirstUser = (await User.countDocuments()) === 0;
         
         user = new User({
             username,
             password: hashedPassword,
-            role: isFirstUser ? 'Admin' : 'TeamOwner' // প্রথম ইউজার অ্যাডমিন, বাকিরা টিমওনার
+            role: isFirstUser ? 'Admin' : 'TeamOwner'
         });
         await user.save();
         res.status(201).json({ message: 'Registration successful!' });
@@ -166,7 +151,6 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-// রুট: ইউজার লগইন
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -174,12 +158,10 @@ app.post('/api/login', async (req, res) => {
         if (!user) {
             return res.status(400).json({ message: 'Invalid credentials.' });
         }
-        // পাসওয়ার্ড চেক
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid credentials.' });
         }
-        // JWT টোকেন তৈরি
         const payload = {
             user: {
                 id: user.id,
@@ -187,7 +169,6 @@ app.post('/api/login', async (req, res) => {
                 role: user.role
             }
         };
-        // JWT_SECRET ব্যবহার করা হলো
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
         res.json({ token });
     } catch (error) {
@@ -195,33 +176,27 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// রুট: ইউজার প্রোফাইল (টোকেন ভেরিফাই করার জন্য)
 app.get('/api/profile', authMiddleware, async (req, res) => {
     try {
-        // authMiddleware থেকে req.user আসে
         const user = await User.findById(req.user.id).select('-password');
         const team = await Team.findOne({ owner: req.user.id });
         res.json({
             username: user.username,
             role: user.role,
-            team: team ? team : null // ইউজারের টিম আছে কিনা
+            team: team ? team : null
         });
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
-
-// --- Team Routes (admin.js এবং team.js-এর জন্য) ---
-
-// রুট: টিম তৈরি (শুধুমাত্র অ্যাডমিন)
+// --- Team Routes ---
 app.post('/api/teams/create', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
     const { teamName, budget, ownerUsername } = req.body;
     try {
-        // টিম ওনারকে খুঁজুন
         const owner = await User.findOne({ username: ownerUsername });
         if (!owner) {
             return res.status(404).json({ message: `User '${ownerUsername}' not found.` });
@@ -229,12 +204,10 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         if (owner.role !== 'TeamOwner') {
              return res.status(400).json({ message: `User '${ownerUsername}' is an Admin, not a TeamOwner.` });
         }
-        // ওনারের অন্য টিম আছে কিনা চেক করুন
         const existingTeam = await Team.findOne({ owner: owner.id });
         if (existingTeam) {
             return res.status(400).json({ message: `User '${ownerUsername}' already owns team '${existingTeam.teamName}'.` });
         }
-        // নতুন টিম তৈরি করুন
         const newTeam = new Team({
             teamName,
             budget,
@@ -242,18 +215,16 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         });
         await newTeam.save();
 
-        // ইউজার মডেলে টিমের ID আপডেট করুন
         owner.team = newTeam._id;
         await owner.save();
 
-        io.emit('teams_updated'); // সব ক্লায়েন্টকে আপডেট পাঠান
+        io.emit('teams_updated');
         res.status(201).json({ message: 'Team created and assigned successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
-// রুট: সব টিমের তথ্য (বাজেট) (team.js-এর জন্য)
 app.get('/api/teams', authMiddleware, async (req, res) => {
     try {
         const teams = await Team.find().select('teamName budget');
@@ -263,7 +234,6 @@ app.get('/api/teams', authMiddleware, async (req, res) => {
     }
 });
 
-// রুট: আমার কেনা প্লেয়ার (team.js-এর জন্য)
 app.get('/api/teams/my-players', authMiddleware, async (req, res) => {
     try {
         const team = await Team.findOne({ owner: req.user.id }).populate('playersOwned');
@@ -277,62 +247,55 @@ app.get('/api/teams/my-players', authMiddleware, async (req, res) => {
     }
 });
 
-
-// --- Player Routes (admin.js এবং team.js-এর জন্য) ---
-
-// রুট: প্লেয়ার তৈরি (শুধুমাত্র অ্যাডমিন)
+// --- Player Routes ---
 app.post('/api/players/create', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
-    const { playerName, category, basePrice } = req.body;
+    // --- নতুন: imageUrl যোগ করা হলো ---
+    const { playerName, category, basePrice, imageUrl } = req.body;
     try {
         const newPlayer = new Player({
             playerName,
             category,
             basePrice,
             currentPrice: basePrice,
-            isSelfRegistered: false, // অ্যাডমিন তৈরি করেছে
-            discordUsername: 'N/A (Admin Created)' // সেলফ-রেজিস্টার না হওয়ায় এটি প্রযোজ্য নয়
+            isSelfRegistered: false,
+            discordUsername: 'N/A (Admin Created)',
+            imageUrl: imageUrl || undefined // যদি URL না দেয় তবে ডিফল্ট ব্যবহার হবে
         });
         await newPlayer.save();
-        io.emit('players_updated'); // সব ক্লায়েন্টকে আপডেট পাঠান
+        io.emit('players_updated');
         res.status(201).json({ message: 'Player created successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
-// রুট: সব প্লেয়ার (অ্যাডমিনের জন্য)
 app.get('/api/players', async (req, res) => {
     try {
         const players = await Player.find()
             .populate('soldTo', 'teamName')
             .populate('bids.bidderTeam', 'teamName')
-            .sort({ status: 1, currentPrice: -1 }); // স্ট্যাটাস অনুযায়ী সাজানো
+            .sort({ status: 1, currentPrice: -1 });
         res.json(players);
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
-// রুট: শুধু অকশনের জন্য উপলব্ধ প্লেয়ার (টিম ড্যাশবোর্ডের জন্য)
 app.get('/api/players/available', async (req, res) => {
     try {
-        // শুধু 'Pending' বা 'Ongoing' প্লেয়ারদের দেখানো হচ্ছে
         const players = await Player.find({ status: { $in: ['Pending', 'Ongoing'] } })
             .populate('bids.bidderTeam', 'teamName')
-            .sort({ status: -1 }); // 'Ongoing' প্লেয়ার আগে দেখাবে
+            .sort({ status: -1 });
         res.json(players);
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
-
-// --- অকশন কন্ট্রোল রুট (আপনার ফ্রন্ট-এন্ড থেকে কল করা) ---
-
-// রুট: বিড করা (টিম ওনার)
+// --- Auction Control Routes ---
 app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
     if (req.user.role !== 'TeamOwner') {
         return res.status(403).json({ error: 'Only Team Owners can bid.' });
@@ -345,10 +308,21 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!team) return res.status(404).json({ error: 'Team not found.' });
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
-        if (bidAmount <= player.currentPrice) return res.status(400).json({ error: `Bid must be higher than $${player.currentPrice}.` });
+        
+        // --- নতুন: Minimum Bid Increment লজিক ---
+        // বর্তমান প্রাইসের ৫% বা কমপক্ষে $10 (দশ ডলার) বেশি হতে হবে
+        const minIncrement = Math.max(10, player.currentPrice * 0.05);
+        const minBidAmount = player.currentPrice + minIncrement;
+
+        if (bidAmount < minBidAmount) {
+            return res.status(400).json({ 
+                error: `Bid must be at least $${minBidAmount.toFixed(0)}. (Current: $${player.currentPrice})` 
+            });
+        }
+        // --- লজিক শেষ ---
+        
         if (team.budget < bidAmount) return res.status(400).json({ error: 'Insufficient budget for this bid.' });
 
-        // বিড গ্রহণ করুন
         const newBid = {
             bidderTeam: team._id,
             amount: bidAmount,
@@ -357,18 +331,16 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         player.bids.push(newBid);
         player.currentPrice = bidAmount;
 
-        // টাইমার রিসেট/বাড়ানো (যেমন, ১০ সেকেন্ড বাকি থাকলে রিসেট করে ৩০ সেকেন্ড করা)
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
         if (timeLeft < 10) {
-             player.auctionEndTime = new Date(Date.now() + 30 * 1000); // সময় ৩০ সেকেন্ড বাড়ানো হলো
+             player.auctionEndTime = new Date(Date.now() + 30 * 1000); // সময় ৩০ সেকেন্ড বাড়ানো
         }
 
         await player.save();
 
-        // সব ক্লায়েন্টকে আপডেট পাঠান
         io.emit('players_updated');
         io.emit('teams_updated');
-        io.emit('auction_log', `BID: ${team.teamName} bids $${bidAmount} for ${player.playerName}`);
+        io.emit('auction_log', `BID: ${team.teamName} bids $${bidAmount} for ${player.playerName}`); // "BID" সাউন্ড এখানে ট্রিগার হবে
 
         res.json({ message: 'Bid placed successfully!' });
 
@@ -377,13 +349,11 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
     }
 });
 
-// রুট: অকশন শুরু করা (অ্যাডমিন)
 app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
     }
     try {
-        // অন্য কোনো প্লেয়ার 'Ongoing' থাকলে শুরু করা যাবে না
         const ongoingPlayer = await Player.findOne({ status: 'Ongoing' });
         if (ongoingPlayer) {
             return res.status(400).json({ message: `Cannot start. ${ongoingPlayer.playerName} is already being auctioned.` });
@@ -395,9 +365,9 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         }
 
         player.status = 'Ongoing';
-        player.currentPrice = player.basePrice; // দাম বেস প্রাইসে রিসেট
-        player.bids = []; // পুরনো বিড মুছে ফেলা (যদি থাকে)
-        player.auctionEndTime = new Date(Date.now() + 60 * 1000); // অকশন টাইমার ৬০ সেকেন্ড
+        player.currentPrice = player.basePrice;
+        player.bids = [];
+        player.auctionEndTime = new Date(Date.now() + 60 * 1000); // ৬০ সেকেন্ড টাইমার
         await player.save();
 
         io.emit('players_updated');
@@ -409,13 +379,11 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
     }
 });
 
-// রুট: প্লেয়ার ম্যানুয়ালি বিক্রি (অ্যাডমিন)
 app.post('/api/players/:id/sold', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
     }
     try {
-        // sellPlayer ফাংশনটি কল করুন, adminTriggered = true দিয়ে
         await sellPlayer(req.params.id, true);
         res.json({ message: 'Player manually sold.' });
     } catch (error) {
@@ -423,9 +391,7 @@ app.post('/api/players/:id/sold', authMiddleware, async (req, res) => {
     }
 });
 
-
-// --- প্লেয়ার সেল্ফ-রেজিস্ট্রেশন রুট (আপনার কোড) ---
-
+// --- Player Self-Registration Routes ---
 app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -443,7 +409,8 @@ app.post('/api/players/self-register', async (req, res) => {
     if (!playerRegistrationEndTime || playerRegistrationEndTime <= new Date()) {
         return res.status(400).json({ message: 'Player registration is currently closed.' });
     }
-    const { playerName, discordUsername } = req.body;
+    // --- নতুন: imageUrl যোগ করা হলো ---
+    const { playerName, discordUsername, imageUrl } = req.body;
     if (!playerName || !discordUsername) {
         return res.status(400).json({ message: 'Player Name and Discord Username are required.' });
     }
@@ -457,7 +424,7 @@ app.post('/api/players/self-register', async (req, res) => {
             discordUsername,
             category: 'Unassigned',
             isSelfRegistered: true,
-            // basePrice স্বয়ংক্রিয়ভাবে 100 সেট হবে (মডেল অনুযায়ী)
+            imageUrl: imageUrl || undefined // যদি URL না দেয় তবে ডিফল্ট ব্যবহার হবে
         });
         await newPlayer.save();
         io.emit('players_updated');
