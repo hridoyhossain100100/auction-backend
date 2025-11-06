@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+
 // --- সমাধান: JWT_SECRET সরাসরি হার্ডকোড করা হলো ---
 const JWT_SECRET = "your_secret_key_123"; // এই কী-টি server.js-এর সাথে মিলতে হবে
 
