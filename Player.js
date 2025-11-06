@@ -7,9 +7,14 @@ const PlayerSchema = new Schema({
         required: true,
         unique: true 
     },
-    discordUsername: { // --- নতুন ফিল্ড ---
+    discordUsername: {
         type: String,
         required: true
+    },
+    // --- নতুন: imageUrl ফিল্ড ---
+    imageUrl: {
+        type: String,
+        default: 'https://static.vecteezy.com/system/resources/thumbnails/009/734/564/small_2x/default-avatar-profile-icon-of-social-media-user-vector.jpg' // একটি ডিফল্ট ছবি
     },
     category: {
         type: String,
@@ -23,15 +28,14 @@ const PlayerSchema = new Schema({
     },
     basePrice: {
         type: Number,
-        required: false, // --- পরিবর্তন: এখন বেস প্রাইস ঐচ্ছিক ---
-        default: 100 // ডিফল্ট বেস প্রাইস সেট করা হলো
+        required: false,
+        default: 100 // ডিফল্ট বেস প্রাইস
     },
     currentPrice: {
         type: Number,
         required: true,
         default: function() { return this.basePrice; }
     },
-    // নিলামের তথ্য
     status: {
         type: String,
         enum: ['Pending', 'Ongoing', 'Sold', 'Unsold'],
