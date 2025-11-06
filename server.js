@@ -13,7 +13,7 @@ const Team = require('./Team');
 const authMiddleware = require('./authMiddleware');
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Render-এর জন্য এটি ঠিক আছে
+const PORT = process.env.PORT || 3000;
 
 // --- Socket.io সেটআপ ---
 const server = http.createServer(app);
@@ -23,7 +23,6 @@ const io = new Server(server, {
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
 
-// --- সমাধান: URI এবং SECRET সরাসরি হার্ডকোড করা হলো ---
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
 
@@ -36,6 +35,32 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log('Successfully connected to MongoDB Atlas!'))
     .catch((error) => console.error('Error connecting to MongoDB:', error.message));
 
+// --- নতুন: রিয়েল-টাইম স্ট্যাটাস পাঠানোর ফাংশন ---
+async function broadcastStats() {
+    try {
+        const [totalPlayers, liveAuctions, playersSold, registeredTeams] = await Promise.all([
+            Player.countDocuments(),
+            Player.countDocuments({ status: 'Ongoing' }),
+            Player.countDocuments({ status: 'Sold' }),
+            Team.countDocuments()
+        ]);
+
+        const stats = {
+            totalPlayers,
+            liveAuctions,
+            playersSold,
+            registeredTeams
+        };
+        
+        // সব কানেক্টেড ক্লায়েন্টকে নতুন স্ট্যাটাস পাঠান
+        io.emit('stats_updated', stats); 
+        
+    } catch (error) {
+        console.error("Error broadcasting stats:", error.message);
+    }
+}
+
+
 // ---------------------------------
 // --- অকশন গেম লজিক ---
 // ---------------------------------
@@ -45,7 +70,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
         const player = await Player.findById(playerId).populate('bids.bidderTeam');
         if (!player || (player.status !== 'Ongoing' && player.status !== 'Pending')) return;
         
-        io.emit('timer_update', { player_id: player._id, time: 0 }); // টাইমার বন্ধ করুন
+        io.emit('timer_update', { player_id: player._id, time: 0 });
 
         let logMessage = '';
         if (player.bids.length === 0) {
@@ -80,10 +105,12 @@ async function sellPlayer(playerId, adminTriggered = false) {
         player.auctionEndTime = null;
         await player.save();
 
+        broadcastStats(); // <-- নতুন: স্ট্যাটাস আপডেট কল
+
         io.emit('players_updated');
         io.emit('teams_updated');
         io.emit('my_players_updated');
-        io.emit('auction_log', logMessage); // "SOLD" সাউন্ড এখানে ট্রিগার হবে
+        io.emit('auction_log', logMessage);
 
     } catch (error) {
         console.error("Sell Player Error:", error.message);
@@ -126,6 +153,31 @@ setInterval(async () => {
 app.get('/', (req, res) => {
     res.send('Auction Backend Server is running successfully!');
 });
+
+// --- নতুন: অ্যাডমিন ড্যাশবোর্ডের জন্য স্ট্যাটাস API ---
+app.get('/api/stats', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    try {
+        const [totalPlayers, liveAuctions, playersSold, registeredTeams] = await Promise.all([
+            Player.countDocuments(),
+            Player.countDocuments({ status: 'Ongoing' }),
+            Player.countDocuments({ status: 'Sold' }),
+            Team.countDocuments()
+        ]);
+        
+        res.json({
+            totalPlayers,
+            liveAuctions,
+            playersSold,
+            registeredTeams
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching stats." });
+    }
+});
+
 
 // --- Auth Routes ---
 app.post('/api/register', async (req, res) => {
@@ -215,6 +267,8 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         });
         await newTeam.save();
 
+        broadcastStats(); // <-- নতুন: স্ট্যাটাস আপডেট কল
+
         owner.team = newTeam._id;
         await owner.save();
 
@@ -252,7 +306,6 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
-    // --- নতুন: imageUrl যোগ করা হলো ---
     const { playerName, category, basePrice, imageUrl } = req.body;
     try {
         const newPlayer = new Player({
@@ -262,9 +315,12 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
             currentPrice: basePrice,
             isSelfRegistered: false,
             discordUsername: 'N/A (Admin Created)',
-            imageUrl: imageUrl || undefined // যদি URL না দেয় তবে ডিফল্ট ব্যবহার হবে
+            imageUrl: imageUrl || undefined
         });
         await newPlayer.save();
+        
+        broadcastStats(); // <-- নতুন: স্ট্যাটাস আপডেট কল
+
         io.emit('players_updated');
         res.status(201).json({ message: 'Player created successfully.' });
     } catch (error) {
@@ -309,8 +365,6 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
         
-        // --- নতুন: Minimum Bid Increment লজিক ---
-        // বর্তমান প্রাইসের ৫% বা কমপক্ষে $10 (দশ ডলার) বেশি হতে হবে
         const minIncrement = Math.max(10, player.currentPrice * 0.05);
         const minBidAmount = player.currentPrice + minIncrement;
 
@@ -319,7 +373,6 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
                 error: `Bid must be at least $${minBidAmount.toFixed(0)}. (Current: $${player.currentPrice})` 
             });
         }
-        // --- লজিক শেষ ---
         
         if (team.budget < bidAmount) return res.status(400).json({ error: 'Insufficient budget for this bid.' });
 
@@ -333,14 +386,14 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
 
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
         if (timeLeft < 10) {
-             player.auctionEndTime = new Date(Date.now() + 30 * 1000); // সময় ৩০ সেকেন্ড বাড়ানো
+             player.auctionEndTime = new Date(Date.now() + 30 * 1000);
         }
 
         await player.save();
 
         io.emit('players_updated');
         io.emit('teams_updated');
-        io.emit('auction_log', `BID: ${team.teamName} bids $${bidAmount} for ${player.playerName}`); // "BID" সাউন্ড এখানে ট্রিগার হবে
+        io.emit('auction_log', `BID: ${team.teamName} bids $${bidAmount} for ${player.playerName}`);
 
         res.json({ message: 'Bid placed successfully!' });
 
@@ -367,8 +420,10 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         player.status = 'Ongoing';
         player.currentPrice = player.basePrice;
         player.bids = [];
-        player.auctionEndTime = new Date(Date.now() + 60 * 1000); // ৬০ সেকেন্ড টাইমার
+        player.auctionEndTime = new Date(Date.now() + 60 * 1000);
         await player.save();
+
+        broadcastStats(); // <-- নতুন: স্ট্যাটাস আপডেট কল
 
         io.emit('players_updated');
         io.emit('auction_log', `AUCTION STARTED: ${player.playerName} (Base Price: $${player.basePrice})`);
@@ -399,7 +454,7 @@ app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     if (playerRegistrationEndTime && playerRegistrationEndTime > new Date()) {
         return res.status(400).json({ message: 'Registration is already ongoing.' });
     }
-    playerRegistrationEndTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // ২৪ ঘণ্টা
+    playerRegistrationEndTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
     io.emit('reg_timer_update', 24 * 60 * 60);
     io.emit('auction_log', `Admin started Player Registration Window for 24 hours.`);
     res.json({ message: 'Player registration started for 24 hours.' });
@@ -409,7 +464,6 @@ app.post('/api/players/self-register', async (req, res) => {
     if (!playerRegistrationEndTime || playerRegistrationEndTime <= new Date()) {
         return res.status(400).json({ message: 'Player registration is currently closed.' });
     }
-    // --- নতুন: imageUrl যোগ করা হলো ---
     const { playerName, discordUsername, imageUrl } = req.body;
     if (!playerName || !discordUsername) {
         return res.status(400).json({ message: 'Player Name and Discord Username are required.' });
@@ -424,9 +478,12 @@ app.post('/api/players/self-register', async (req, res) => {
             discordUsername,
             category: 'Unassigned',
             isSelfRegistered: true,
-            imageUrl: imageUrl || undefined // যদি URL না দেয় তবে ডিফল্ট ব্যবহার হবে
+            imageUrl: imageUrl || undefined
         });
         await newPlayer.save();
+        
+        broadcastStats(); // <-- নতুন: স্ট্যাটাস আপডেট কল
+
         io.emit('players_updated');
         io.emit('auction_log', `${playerName} successfully self-registered (Discord: ${discordUsername}).`);
         res.status(201).json({ message: `${playerName} registered successfully! Awaiting auction.` });
