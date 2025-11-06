@@ -22,8 +22,10 @@ const io = new Server(server, {
 });
 // --- সেটআপ শেষ ---
 
-const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0"; // <-- আপনার কানেকশন স্ট্রিং দিন
+// --- আপনার দেওয়া URI এবং Secret ---
+const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
+// ---
 
 // মিডলওয়্যার
 app.use(cors());
@@ -39,22 +41,18 @@ mongoose.connect(MONGO_URI)
 // ---------------------------------
 
 // --- প্লেয়ার বিক্রি করার মূল ফাংশন ---
-// এই ফাংশনটি টাইমার শেষ হলে বা অ্যাডমিন ম্যানুয়ালি ক্লিক করলে কল হবে
 async function sellPlayer(playerId, adminTriggered = false) {
     try {
         const player = await Player.findById(playerId);
         if (!player || (player.status !== 'Ongoing' && player.status !== 'Pending')) {
-            // যদি প্লেয়ার না পাওয়া যায় বা নিলাম না চলে
             return; 
         }
 
         let logMessage = '';
         if (player.bids.length === 0) {
-            // কোনো বিড না থাকলে "Unsold"
             player.status = 'Unsold';
             logMessage = `${player.playerName} went UNSOLD (Base Price: $${player.basePrice})`;
         } else {
-            // হাইয়েস্ট বিড এবং বিজয়ী টিম
             const lastBid = player.bids[player.bids.length - 1];
             const winningTeamId = lastBid.bidderTeam;
             const soldPrice = lastBid.amount;
@@ -65,17 +63,13 @@ async function sellPlayer(playerId, adminTriggered = false) {
                 throw new Error('Winning team not found');
             }
             if (winningTeam.budget < soldPrice && !adminTriggered) {
-                // যদি কোনো কারণে বাজেটের চেয়ে বেশি বিড হয়ে যায় (যদিও চেক করা আছে)
-                // অ্যাডমিন ম্যানুয়ালি সোল্ড করলে বাজেট চেক ইগনোর করা যায় (ঐচ্ছিক)
                 throw new Error(`Team ${winningTeam.teamName} has insufficient budget!`);
             }
 
-            // বাজেট ম্যানেজমেন্ট
             winningTeam.budget -= soldPrice;
             winningTeam.playersOwned.push(playerId);
             await winningTeam.save();
 
-            // প্লেয়ার স্ট্যাটাস আপডেট
             player.status = 'Sold';
             player.soldTo = winningTeamId;
             player.soldAmount = soldPrice;
@@ -83,49 +77,45 @@ async function sellPlayer(playerId, adminTriggered = false) {
             logMessage = `${player.playerName} SOLD to ${winningTeam.teamName} for $${soldPrice}`;
         }
 
-        player.auctionEndTime = null; // টাইমার রিসেট
+        player.auctionEndTime = null; 
         await player.save();
 
-        // সব ক্লায়েন্টকে রিয়েল-টাইমে জানাও
-        io.emit('players_updated'); // সব প্লেয়ার লিস্ট রিফ্রেশ
-        io.emit('teams_updated');   // সব টিম বাজেট রিফ্রেশ
-        io.emit('my_players_updated'); // কেনা প্লেয়ার লিস্ট রিফ্রেশ
-        io.emit('auction_log', logMessage); // লাইভ লগে মেসেজ
+        io.emit('players_updated'); 
+        io.emit('teams_updated');   
+        io.emit('my_players_updated'); 
+        io.emit('auction_log', logMessage); 
 
     } catch (error) {
         console.error("Sell Player Error:", error.message);
-        io.emit('auction_log', `Error selling ${player.playerName}: ${error.message}`);
+        io.emit('auction_log', `Error selling player: ${error.message}`);
     }
 }
 
 // --- অকশন টাইমার "গেম লুপ" (প্রতি সেকেন্ডে চলবে) ---
 setInterval(async () => {
     try {
-        // নিলাম চলছে এমন প্লেয়ারকে খুঁজুন
         const ongoingPlayer = await Player.findOne({ status: 'Ongoing' });
 
         if (ongoingPlayer) {
             const timeLeft = Math.round((new Date(ongoingPlayer.auctionEndTime).getTime() - Date.now()) / 1000);
 
             if (timeLeft <= 0) {
-                // সময় শেষ! স্বয়ংক্রিয়ভাবে বিক্রি করুন
-                io.emit('timer_update', { player_id: ongoingPlayer._id, time: 0 }); // ক্লায়েন্টকে জানাও সময় শেষ
+                io.emit('timer_update', { player_id: ongoingPlayer._id, time: 0 }); 
                 await sellPlayer(ongoingPlayer._id);
             } else {
-                // সময় বাকি আছে, টাইমার আপডেট পাঠান
                 io.emit('timer_update', { player_id: ongoingPlayer._id, time: timeLeft });
             }
         }
     } catch (error) {
         console.error('Timer Loop Error:', error.message);
     }
-}, 1000); // প্রতি 1000ms = 1 সেকেন্ড
+}, 1000); // প্রতি 1 সেকেন্ড
 
 // ---------------------------------
 // --- API রুট ---
 // ---------------------------------
 
-// Auth API রুট (অপরিবর্তিত)
+// Auth API রুট
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -159,7 +149,7 @@ app.get('/api/profile', authMiddleware, async (req, res) => {
     } catch (err) { res.status(500).send('Server Error'); }
 });
 
-// Team API রুট (অপরিবর্তিত)
+// Team API রুট
 app.post('/api/teams/create', authMiddleware, async (req, res) => {
     try {
         if (req.user.role !== 'Admin') return res.status(403).json({ message: 'Access denied.' });
@@ -194,7 +184,7 @@ app.get('/api/teams/my-players', authMiddleware, async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error fetching players' }); }
 });
 
-// প্লেয়ার (Player) API রুট (আপডেটেড)
+// প্লেয়ার (Player) API রুট
 app.post('/api/players/create', authMiddleware, async (req, res) => {
     try {
         if (req.user.role !== 'Admin') return res.status(403).json({ message: 'Access denied.' });
@@ -232,7 +222,7 @@ app.get('/api/players/available', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error fetching available players' }); }
 });
 
-// Bid on a Player (আপডেটেড)
+// Bid on a Player
 app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
     try {
         const { bidAmount } = req.body;
@@ -247,35 +237,28 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         const player = await Player.findById(playerId);
         if (!player) return res.status(404).json({ message: 'Player not found' });
 
-        // শুধু 'Ongoing' প্লেয়ারকে বিড করা যাবে
         if (player.status !== 'Ongoing') return res.status(400).json({ message: 'Bidding for this player is not active' });
 
-        // চেক করুন সময় শেষ কিনা
         if (new Date() > new Date(player.auctionEndTime)) return res.status(400).json({ message: 'Time for bidding has expired' });
 
         if (bidAmount <= player.currentPrice) return res.status(400).json({ message: 'Bid must be higher than the current price' });
 
-        // বিড সেভ করুন
         const newBid = { bidderTeam: team._id, amount: bidAmount, timestamp: new Date() };
         player.bids.push(newBid);
         player.currentPrice = bidAmount;
 
-        // --- নতুন: টাইমার ১০ সেকেন্ডে রিসেট করুন ---
-        player.auctionEndTime = new Date(Date.now() + 10 * 1000);
+        player.auctionEndTime = new Date(Date.now() + 10 * 1000); // ১০ সেকেন্ড টাইমার রিসেট
         await player.save();
 
-        // রিয়েল-টাইমে সবাইকে জানান
         io.emit('players_updated');
         io.emit('auction_log', `${team.teamName} bid $${bidAmount} for ${player.playerName}`);
-
-        // টাইমার আপডেট পাঠান (যদিও গেম লুপ এটি করবে, এটি দ্রুত রেসপন্সের জন্য)
         io.emit('timer_update', { player_id: player._id, time: 10 }); 
 
         res.json({ message: 'Bid placed successfully!', player: player });
     } catch (error) { res.status(500).json({ message: 'Server error placing bid' }); }
 });
 
-// Sell a Player (আপডেটেড)
+// Sell a Player
 app.post('/api/players/:id/sold', authMiddleware, async (req, res) => {
     try {
         if (req.user.role !== 'Admin') return res.status(403).json({ message: 'Access denied.' });
@@ -285,19 +268,17 @@ app.post('/api/players/:id/sold', authMiddleware, async (req, res) => {
 
         if (!player || player.status !== 'Ongoing') return res.status(400).json({ message: 'Player is not in an ongoing auction' });
 
-        // অ্যাডমিন ম্যানুয়ালি সোল্ড করেছে
-        await sellPlayer(playerId, true); 
+        await sellPlayer(playerId, true); // ম্যানুয়ালি সোল্ড
 
         res.json({ message: 'Player manually sold!' });
     } catch (error) { res.status(500).json({ message: 'Server error selling player' }); }
 });
 
-// Start Auction (আপডেটেড)
+// Start Auction
 app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
     try {
         if (req.user.role !== 'Admin') return res.status(403).json({ message: 'Access denied.' });
 
-        // চেক করুন অন্য কোনো নিলাম চলছে কিনা
         const alreadyOngoing = await Player.findOne({ status: 'Ongoing' });
         if (alreadyOngoing) {
             return res.status(400).json({ message: `Auction for ${alreadyOngoing.playerName} is already in progress!` });
@@ -308,7 +289,6 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ message: 'Player not found' });
         if (player.status !== 'Pending') return res.status(400).json({ message: 'Auction already active or finished' });
 
-        // স্ট্যাটাস 'Ongoing' করুন এবং ৬০ সেকেন্ড টাইমার সেট করুন
         player.status = 'Ongoing';
         player.auctionEndTime = new Date(Date.now() + 60 * 1000); // ৬০ সেকেন্ড
         await player.save();
