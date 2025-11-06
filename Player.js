@@ -11,7 +11,6 @@ const PlayerSchema = new Schema({
         type: String,
         required: true
     },
-    // --- নতুন: imageUrl ফিল্ড ---
     imageUrl: {
         type: String,
         default: 'https://static.vecteezy.com/system/resources/thumbnails/009/734/564/small_2x/default-avatar-profile-icon-of-social-media-user-vector.jpg' // একটি ডিফল্ট ছবি
