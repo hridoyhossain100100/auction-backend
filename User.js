@@ -12,8 +12,8 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['Admin', 'TeamOwner'], // ভূমিকা শুধু এই দুটি হতে পারবে
-        default: 'TeamOwner'       // নতুন কেউ রেজিস্টার করলে সে 'TeamOwner' হবে
+        enum: ['Admin', 'TeamOwner'],
+        default: 'TeamOwner'
     },
     team: {
         type: mongoose.Schema.Types.ObjectId,
