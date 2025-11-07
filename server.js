@@ -136,11 +136,7 @@ app.get('/', (req, res) => {
     res.send('Auction Backend Server is running successfully!');
 });
 
-// === সমাধান: এই রুটটি এখন অ্যাডমিন এবং টিম ওনার উভয়ই অ্যাক্সেস করতে পারবে ===
 app.get('/api/stats', authMiddleware, async (req, res) => {
-    // if (req.user.role !== 'Admin') { // <-- এই চেকিংটি সরানো হলো
-    //     return res.status(403).json({ message: 'Access denied.' });
-    // }
     try {
         const [totalPlayers, liveAuctions, playersSold, registeredTeams] = await Promise.all([
             Player.countDocuments(),
@@ -368,6 +364,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
     }
 });
 
+// === এই রুটটি আপডেটেড (Unsold প্লেয়ার সাপোর্ট) ===
 app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -379,13 +376,16 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         }
 
         const player = await Player.findById(req.params.id);
-        if (!player || player.status !== 'Pending') {
-            return res.status(400).json({ message: 'Player is not ready for auction.' });
+        
+        // --- সমাধান: 'Pending' এবং 'Unsold' উভয়কেই অনুমতি দিন ---
+        if (!player || (player.status !== 'Pending' && player.status !== 'Unsold')) {
+            return res.status(400).json({ message: 'Player is not ready for auction (must be Pending or Unsold).' });
         }
+        // --- সমাধান শেষ ---
 
         player.status = 'Ongoing';
-        player.currentPrice = player.basePrice;
-        player.bids = [];
+        player.currentPrice = player.basePrice; // মূল্য বেস প্রাইসে রিসেট করুন
+        player.bids = []; // পুরনো বিড মুছে ফেলুন
         player.auctionEndTime = new Date(Date.now() + 60 * 1000);
         await player.save();
 
@@ -399,6 +399,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
+// === আপডেট শেষ ===
 
 app.post('/api/players/:id/sold', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
