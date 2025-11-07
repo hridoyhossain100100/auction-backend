@@ -1,3 +1,5 @@
+// === সম্পূর্ণ server.js ফাইল (আপডেটেড) ===
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -7,8 +9,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 // --- মডেল ইম্পোর্ট ---
-// (আপনাকে অবশ্যই User.js, Player.js, Team.js এবং authMiddleware.js ফাইলগুলো
-// এই server.js ফাইলের পাশেই রাখতে হবে)
 const User = require('./User');
 const Player = require('./Player');
 const Team = require('./Team');
@@ -22,8 +22,10 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
+
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
+let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
 
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
@@ -350,12 +352,10 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
 
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
         
-        // === পরিবর্তন ===
-        // যখন শেষ ১০ সেকেন্ডে বিড হবে, টাইমার ৩০ এর বদলে ১০ সেকেন্ডে রিসেট হবে।
+        // (আগের কোড অনুযায়ী ১০ সেকেন্ডে রিসেট)
         if (timeLeft < 10) {
              player.auctionEndTime = new Date(Date.now() + 10 * 1000);
         }
-        // === পরিবর্তন শেষ ===
 
         await player.save();
 
@@ -370,7 +370,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
     }
 });
 
-// === এই রুটটি আপডেটেড (Unsold প্লেয়ার সাপোর্ট) ===
+
 app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -383,19 +383,16 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
 
         const player = await Player.findById(req.params.id);
         
-        // --- সমাধান: 'Pending' এবং 'Unsold' উভয়কেই অনুমতি দিন ---
         if (!player || (player.status !== 'Pending' && player.status !== 'Unsold')) {
             return res.status(400).json({ message: 'Player is not ready for auction (must be Pending or Unsold).' });
         }
-        // --- সমাধান শেষ ---
 
         player.status = 'Ongoing';
-        player.currentPrice = player.basePrice; // মূল্য বেস প্রাইসে রিসেট করুন
-        player.bids = []; // পুরনো বিড মুছে ফেলুন
+        player.currentPrice = player.basePrice; 
+        player.bids = []; 
         
-        // === পরিবর্তন ===
-        // নিলামের সময় ৬০ সেকেন্ড থেকে ৩০ সেকেন্ড করা হলো
-        player.auctionEndTime = new Date(Date.now() + 30 * 1000);
+        // === পরিবর্তন: অ্যাডমিনের সেট করা সময় ব্যবহার করা ===
+        player.auctionEndTime = new Date(Date.now() + globalAuctionDuration * 1000);
         // === পরিবর্তন শেষ ===
         
         await player.save();
@@ -410,7 +407,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
-// === আপডেট শেষ ===
+
 
 app.post('/api/players/:id/sold', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
@@ -480,6 +477,75 @@ app.post('/api/players/self-register', async (req, res) => {
         res.status(201).json({ message: `${playerName} registered successfully! Awaiting auction.` });
     } catch (error) {
         res.status(500).json({ message: 'Server error during registration.' });
+    }
+});
+
+// ---------------------------------
+// --- নতুন রুট: অ্যাডমিন সেটিংস, প্লেয়ার ও টিম ডিলিট ---
+// ---------------------------------
+
+// === নতুন: অকশন সেটিংস রুট ===
+app.post('/api/admin/settings', authMiddleware, (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    const { duration } = req.body;
+    if (duration && !isNaN(duration) && duration > 5) { // কমপক্ষে ৫ সেকেন্ড
+        globalAuctionDuration = parseInt(duration, 10);
+        console.log(`Auction duration set to: ${globalAuctionDuration} seconds`);
+        
+        io.emit('auction_log', `Admin updated auction duration to ${globalAuctionDuration} seconds.`);
+        
+        res.json({ message: `Auction duration updated to ${globalAuctionDuration} seconds.` });
+    } else {
+        res.status(400).json({ message: 'Invalid duration provided (min 5 seconds).' });
+    }
+});
+
+// === নতুন: প্লেয়ার ডিলিট রুট ===
+app.delete('/api/players/:id', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    try {
+        const player = await Player.findByIdAndDelete(req.params.id);
+        if (!player) {
+            return res.status(404).json({ message: 'Player not found.' });
+        }
+        
+        // সব ক্লায়েন্টকে আপডেট জানানো
+        io.emit('players_updated');
+        broadcastStats(); // স্ট্যাটাস আপডেট করা
+        io.emit('auction_log', `Admin deleted player: ${player.playerName}`);
+        
+        res.json({ message: 'Player deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error: ' + error.message });
+    }
+});
+
+// === নতুন: টিম ডিলিট রুট ===
+app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    try {
+        const team = await Team.findByIdAndDelete(req.params.id);
+        if (!team) {
+            return res.status(404).json({ message: 'Team not found.' });
+        }
+        
+        // এই টিমের ওনারের কাছ থেকে টিম আইডি মুছে ফেলা
+        await User.updateOne({ _id: team.owner }, { $unset: { team: "" } });
+
+        // সব ক্লায়েন্টকে আপডেট জানানো
+        io.emit('teams_updated');
+        broadcastStats(); // স্ট্যাটাস আপডেট করা
+        io.emit('auction_log', `Admin deleted team: ${team.teamName}`);
+        
+        res.json({ message: 'Team deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
