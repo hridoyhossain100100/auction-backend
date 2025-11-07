@@ -7,6 +7,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 // --- মডেল ইম্পোর্ট ---
+// (আপনাকে অবশ্যই User.js, Player.js, Team.js এবং authMiddleware.js ফাইলগুলো
+// এই server.js ফাইলের পাশেই রাখতে হবে)
 const User = require('./User');
 const Player = require('./Player');
 const Team = require('./Team');
@@ -347,9 +349,13 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         player.currentPrice = bidAmount;
 
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
+        
+        // === পরিবর্তন ===
+        // যখন শেষ ১০ সেকেন্ডে বিড হবে, টাইমার ৩০ এর বদলে ১০ সেকেন্ডে রিসেট হবে।
         if (timeLeft < 10) {
-             player.auctionEndTime = new Date(Date.now() + 30 * 1000);
+             player.auctionEndTime = new Date(Date.now() + 10 * 1000);
         }
+        // === পরিবর্তন শেষ ===
 
         await player.save();
 
@@ -386,7 +392,12 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         player.status = 'Ongoing';
         player.currentPrice = player.basePrice; // মূল্য বেস প্রাইসে রিসেট করুন
         player.bids = []; // পুরনো বিড মুছে ফেলুন
-        player.auctionEndTime = new Date(Date.now() + 60 * 1000);
+        
+        // === পরিবর্তন ===
+        // নিলামের সময় ৬০ সেকেন্ড থেকে ৩০ সেকেন্ড করা হলো
+        player.auctionEndTime = new Date(Date.now() + 30 * 1000);
+        // === পরিবর্তন শেষ ===
+        
         await player.save();
 
         broadcastStats();
