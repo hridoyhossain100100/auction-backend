@@ -51,6 +51,7 @@ async function broadcastStats() {
     }
 }
 
+
 // --- অকশন গেম লজিক ---
 async function sellPlayer(playerId, adminTriggered = false) {
     try {
@@ -88,7 +89,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
         player.auctionEndTime = null;
         await player.save();
 
-        broadcastStats(); // স্ট্যাটাস আপডেট কল
+        broadcastStats(); 
 
         io.emit('players_updated');
         io.emit('teams_updated');
@@ -231,7 +232,7 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         const newTeam = new Team({ teamName, budget, owner: owner.id });
         await newTeam.save();
 
-        broadcastStats(); // স্ট্যাটাস আপডেট কল
+        broadcastStats();
 
         owner.team = newTeam._id;
         await owner.save();
@@ -282,7 +283,7 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         });
         await newPlayer.save();
         
-        broadcastStats(); // স্ট্যাটাস আপডেট কল
+        broadcastStats();
 
         io.emit('players_updated');
         res.status(201).json({ message: 'Player created successfully.' });
@@ -303,12 +304,11 @@ app.get('/api/players', async (req, res) => {
     }
 });
 
-// === এই রুটটি পরিবর্তন করা হয়েছে ===
 app.get('/api/players/available', async (req, res) => {
     try {
         const players = await Player.find({ status: { $in: ['Pending', 'Ongoing'] } })
             .populate('bids.bidderTeam', 'teamName')
-            .sort({ status: 1 }); // সমাধান: { status: 1 } (A-Z) করা হয়েছে, তাই 'Ongoing' আগে আসবে
+            .sort({ status: 1 }); // 'Ongoing' প্লেয়ার আগে আসবে
         res.json(players);
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
@@ -387,7 +387,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         player.auctionEndTime = new Date(Date.now() + 60 * 1000);
         await player.save();
 
-        broadcastStats(); // স্ট্যাটাস আপডেট কল
+        broadcastStats();
 
         io.emit('players_updated');
         io.emit('auction_log', `AUCTION STARTED: ${player.playerName} (Base Price: $${player.basePrice})`);
@@ -424,19 +424,35 @@ app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     res.json({ message: 'Player registration started for 24 hours.' });
 });
 
+// === এই রুটটি আপডেটেড (ডুপ্লিকেট ডিসকর্ড চেক) ===
 app.post('/api/players/self-register', async (req, res) => {
     if (!playerRegistrationEndTime || playerRegistrationEndTime <= new Date()) {
         return res.status(400).json({ message: 'Player registration is currently closed.' });
     }
+    
     const { playerName, discordUsername, imageUrl } = req.body;
     if (!playerName || !discordUsername) {
         return res.status(400).json({ message: 'Player Name and Discord Username are required.' });
     }
     try {
-        const existingPlayer = await Player.findOne({ playerName });
+        // --- সমাধান: প্লেয়ারের নাম এবং ডিসকর্ড নাম উভয়ই চেক করা ---
+        const existingPlayer = await Player.findOne({ 
+            $or: [
+                { playerName: playerName }, 
+                { discordUsername: discordUsername }
+            ] 
+        });
+
         if (existingPlayer) {
-            return res.status(400).json({ message: 'Player name already registered.' });
+            if (existingPlayer.playerName === playerName) {
+                return res.status(400).json({ message: 'This Player Name is already registered.' });
+            }
+            if (existingPlayer.discordUsername === discordUsername) {
+                return res.status(400).json({ message: 'This Discord Username is already registered.' });
+            }
         }
+        // --- সমাধান শেষ ---
+        
         const newPlayer = new Player({
             playerName,
             discordUsername,
@@ -446,7 +462,7 @@ app.post('/api/players/self-register', async (req, res) => {
         });
         await newPlayer.save();
         
-        broadcastStats(); // স্ট্যাটাস আপডেট কল
+        broadcastStats();
 
         io.emit('players_updated');
         io.emit('auction_log', `${playerName} successfully self-registered (Discord: ${discordUsername}).`);
