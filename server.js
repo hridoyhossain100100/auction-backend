@@ -136,10 +136,11 @@ app.get('/', (req, res) => {
     res.send('Auction Backend Server is running successfully!');
 });
 
+// === সমাধান: এই রুটটি এখন অ্যাডমিন এবং টিম ওনার উভয়ই অ্যাক্সেস করতে পারবে ===
 app.get('/api/stats', authMiddleware, async (req, res) => {
-    if (req.user.role !== 'Admin') {
-        return res.status(403).json({ message: 'Access denied.' });
-    }
+    // if (req.user.role !== 'Admin') { // <-- এই চেকিংটি সরানো হলো
+    //     return res.status(403).json({ message: 'Access denied.' });
+    // }
     try {
         const [totalPlayers, liveAuctions, playersSold, registeredTeams] = await Promise.all([
             Player.countDocuments(),
@@ -152,6 +153,7 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
         res.status(500).json({ message: "Error fetching stats." });
     }
 });
+
 
 // --- Auth Routes ---
 app.post('/api/register', async (req, res) => {
@@ -308,7 +310,7 @@ app.get('/api/players/available', async (req, res) => {
     try {
         const players = await Player.find({ status: { $in: ['Pending', 'Ongoing'] } })
             .populate('bids.bidderTeam', 'teamName')
-            .sort({ status: 1 }); // 'Ongoing' প্লেয়ার আগে আসবে
+            .sort({ status: 1 });
         res.json(players);
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
@@ -424,7 +426,6 @@ app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     res.json({ message: 'Player registration started for 24 hours.' });
 });
 
-// === এই রুটটি আপডেটেড (ডুপ্লিকেট ডিসকর্ড চেক) ===
 app.post('/api/players/self-register', async (req, res) => {
     if (!playerRegistrationEndTime || playerRegistrationEndTime <= new Date()) {
         return res.status(400).json({ message: 'Player registration is currently closed.' });
@@ -435,7 +436,6 @@ app.post('/api/players/self-register', async (req, res) => {
         return res.status(400).json({ message: 'Player Name and Discord Username are required.' });
     }
     try {
-        // --- সমাধান: প্লেয়ারের নাম এবং ডিসকর্ড নাম উভয়ই চেক করা ---
         const existingPlayer = await Player.findOne({ 
             $or: [
                 { playerName: playerName }, 
@@ -451,7 +451,6 @@ app.post('/api/players/self-register', async (req, res) => {
                 return res.status(400).json({ message: 'This Discord Username is already registered.' });
             }
         }
-        // --- সমাধান শেষ ---
         
         const newPlayer = new Player({
             playerName,
