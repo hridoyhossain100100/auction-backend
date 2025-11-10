@@ -25,7 +25,7 @@ const io = new Server(server, {
 
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
-let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
+let globalAuctionDuration = 30; // <-- নিলামের ডিফল্ট সময় (সেকেন্ডে)
 
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
@@ -268,20 +268,23 @@ app.get('/api/teams/my-players', authMiddleware, async (req, res) => {
 });
 
 // --- Player Routes ---
+
+// === পরিবর্তন: অ্যাডমিন ফর্মের জন্য এই রুটটি আপডেটেড ===
 app.post('/api/players/create', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
-    const { playerName, category, basePrice, imageUrl } = req.body;
+    // category এবং imageUrl বাদ দেওয়া হয়েছে, discordUsername যোগ করা হয়েছে
+    const { playerName, discordUsername, basePrice } = req.body; 
     try {
         const newPlayer = new Player({
             playerName,
-            category,
+            discordUsername: discordUsername || 'N/A (Admin Created)',
             basePrice,
             currentPrice: basePrice,
             isSelfRegistered: false,
-            discordUsername: 'N/A (Admin Created)',
-            imageUrl: imageUrl || undefined
+            category: 'Unassigned', // একটি ডিফল্ট ক্যাটাগরি সেট করা হলো
+            imageUrl: undefined
         });
         await newPlayer.save();
         
@@ -352,7 +355,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
 
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
         
-        // (আগের কোড অনুযায়ী ১০ সেকেন্ডে রিসেট)
+        // (আগের কোড অনুযায়ী ১০ সেকেন্ডে রিসেট)
         if (timeLeft < 10) {
              player.auctionEndTime = new Date(Date.now() + 10 * 1000);
         }
@@ -391,7 +394,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         player.currentPrice = player.basePrice; 
         player.bids = []; 
         
-        // === পরিবর্তন: অ্যাডমিনের সেট করা সময় ব্যবহার করা ===
+        // === পরিবর্তন: অ্যাডমিনের সেট করা সময় ব্যবহার করা ===
         player.auctionEndTime = new Date(Date.now() + globalAuctionDuration * 1000);
         // === পরিবর্তন শেষ ===
         
@@ -435,12 +438,14 @@ app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     res.json({ message: 'Player registration started for 24 hours.' });
 });
 
+// === পরিবর্তন: রেজিস্ট্রেশন ফর্মের জন্য এই রুটটি আপডেটেড ===
 app.post('/api/players/self-register', async (req, res) => {
     if (!playerRegistrationEndTime || playerRegistrationEndTime <= new Date()) {
         return res.status(400).json({ message: 'Player registration is currently closed.' });
     }
     
-    const { playerName, discordUsername, imageUrl } = req.body;
+    // imageUrl বাদ দেওয়া হয়েছে
+    const { playerName, discordUsername } = req.body; 
     if (!playerName || !discordUsername) {
         return res.status(400).json({ message: 'Player Name and Discord Username are required.' });
     }
@@ -464,9 +469,11 @@ app.post('/api/players/self-register', async (req, res) => {
         const newPlayer = new Player({
             playerName,
             discordUsername,
-            category: 'Unassigned',
+            category: 'Unassigned', // ডিফল্ট ক্যাটাগরি
             isSelfRegistered: true,
-            imageUrl: imageUrl || undefined
+            basePrice: 100, // ডিফল্ট বেস প্রাইস
+            currentPrice: 100 // ডিফল্ট কারেন্ট প্রাইস
+            // imageUrl: imageUrl || undefined <-- বাদ দেওয়া হয়েছে
         });
         await newPlayer.save();
         
@@ -481,10 +488,9 @@ app.post('/api/players/self-register', async (req, res) => {
 });
 
 // ---------------------------------
-// --- নতুন রুট: অ্যাডমিন সেটিংস, প্লেয়ার ও টিম ডিলিট ---
+// --- নতুন রুট: অ্যাডমিন সেটিংস, প্লেয়ার ও টিম ডিলিট ---
 // ---------------------------------
 
-// === নতুন: অকশন সেটিংস রুট ===
 app.post('/api/admin/settings', authMiddleware, (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -502,7 +508,6 @@ app.post('/api/admin/settings', authMiddleware, (req, res) => {
     }
 });
 
-// === নতুন: প্লেয়ার ডিলিট রুট ===
 app.delete('/api/players/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -524,7 +529,6 @@ app.delete('/api/players/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// === নতুন: টিম ডিলিট রুট ===
 app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -555,3 +559,5 @@ server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log('Socket.io is listening for connections.');
 });
+
+// === ফিক্সড: অতিরিক্ত '});' মুছে ফেলা হয়েছে ===
