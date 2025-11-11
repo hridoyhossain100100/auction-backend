@@ -1,4 +1,4 @@
-// === সম্পূর্ণ server.js ফাইল (আপডেটেড) ===
+// === সম্পূর্ণ server.js ফাইল (সঠিক) ===
 
 const express = require('express');
 const cors = require('cors');
@@ -25,7 +25,7 @@ const io = new Server(server, {
 
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
-let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
+let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
 
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
@@ -79,7 +79,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
                 throw new Error(`Team ${winningTeam.teamName} has insufficient budget!`);
             }
             if (!adminTriggered) {
-                 winningTeam.budget -= soldPrice;
+                winningTeam.budget -= soldPrice;
             }
             winningTeam.playersOwned.push(playerId);
             await winningTeam.save();
@@ -268,42 +268,36 @@ app.get('/api/teams/my-players', authMiddleware, async (req, res) => {
 });
 
 // --- Player Routes ---
-// ...
 app.post('/api/players/create', authMiddleware, async (req, res) => {
-    // ...
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied. Admins only.' });
+    }
 
-    /* === পরিবর্তন শুরু === */
-    // ১. category ও imageUrl বাদ দিন, discordUsername যোগ করুন
-    const { playerName, discordUsername, basePrice } = req.body; 
-try {
-    const newPlayer = new Player({
-        playerName,
-        discordUsername,
-        basePrice,
-        currentPrice: basePrice,
-        isSelfRegistered: false
-    }); // <-- এই বন্ধনীটি '}' আপনার কোডে মিসিং ছিলো
+    // === ❗️❗️ প্রথম সমাধান এখানে (লাইন ৩৫১-৩৮৮) ===
+    // কোডটি পরিষ্কার করা হয়েছে এবং ডুপ্লিকেট কোড মুছে ফেলা হয়েছে
+    const { playerName, discordUsername, basePrice } = req.body; 
+    try {
+        const newPlayer = new Player({
+            playerName,
+            discordUsername,
+            basePrice,
+            currentPrice: basePrice,
+            isSelfRegistered: false
+            // category এবং imageUrl বাদ দেওয়া হয়েছে
+        });
 
-    await newPlayer.save(); // <-- প্লেয়ার সেভ করার এই লাইনটিও জরুরি
+        await newPlayer.save(); 
 
-    broadcastStats(); // <-- এই লাইনগুলোও try ব্লকের ভেতরে থাকবে
-    io.emit('players_updated');
-    res.status(201).json({ message: 'Player created successfully.' });
-
-} catch (error) {
-    res.status(500).json({ message: 'Server error: ' + error.message });
-}
-
-        await newPlayer.save();
-        
-        broadcastStats();
-
+        broadcastStats(); 
         io.emit('players_updated');
         res.status(201).json({ message: 'Player created successfully.' });
+
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
+// === প্রথম সমাধান শেষ ===
+
 
 app.get('/api/players', async (req, res) => {
     try {
@@ -363,7 +357,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
 
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
         
-        // (আগের কোড অনুযায়ী ১০ সেকেন্ডে রিসেট)
+        // (আগের কোড অনুযায়ী ১০ সেকেন্ডে রিসেট)
         if (timeLeft < 10) {
              player.auctionEndTime = new Date(Date.now() + 10 * 1000);
         }
@@ -402,7 +396,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         player.currentPrice = player.basePrice; 
         player.bids = []; 
         
-        // === পরিবর্তন: অ্যাডমিনের সেট করা সময় ব্যবহার করা ===
+        // === পরিবর্তন: অ্যাডমিনের সেট করা সময় ব্যবহার করা ===
         player.auctionEndTime = new Date(Date.now() + globalAuctionDuration * 1000);
         // === পরিবর্তন শেষ ===
         
@@ -472,10 +466,11 @@ app.post('/api/players/self-register', async (req, res) => {
             }
         }
         
+        // === ❗️❗️ দ্বিতীয় সমাধান এখানে (লাইন ৪৬০) ===
+        // 'category' ফিল্ডটি ডিলিট করা হয়েছে
         const newPlayer = new Player({
             playerName,
             discordUsername,
-            category: 'Unassigned',
             isSelfRegistered: true,
             imageUrl: imageUrl || undefined
         });
@@ -490,9 +485,11 @@ app.post('/api/players/self-register', async (req, res) => {
         res.status(500).json({ message: 'Server error during registration.' });
     }
 });
+// === দ্বিতীয় সমাধান শেষ ===
+
 
 // ---------------------------------
-// --- নতুন রুট: অ্যাডমিন সেটিংস, প্লেয়ার ও টিম ডিলিট ---
+// --- নতুন রুট: অ্যাডমিন সেটিংস, প্লেয়ার ও টিম ডিলিট ---
 // ---------------------------------
 
 // === নতুন: অকশন সেটিংস রুট ===
@@ -513,7 +510,7 @@ app.post('/api/admin/settings', authMiddleware, (req, res) => {
     }
 });
 
-// === নতুন: প্লেয়ার ডিলিট রুট ===
+// === নতুন: প্লেয়ার ডিলিট রুট ===
 app.delete('/api/players/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -564,5 +561,5 @@ app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
 // --- সার্ভার চালু করুন ---
 server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('Socket.io is listening for connections.');
+    console.log('Socket.io is listening for connections.')
 });
