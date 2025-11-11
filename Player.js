@@ -15,12 +15,6 @@ const PlayerSchema = new Schema({
         type: String,
         default: 'https://static.vecteezy.com/system/resources/thumbnails/009/734/564/small_2x/default-avatar-profile-icon-of-social-media-user-vector.jpg' // একটি ডিফল্ট ছবি
     },
-    category: {
-        type: String,
-        required: true,
-        enum: ['Batsman', 'Bowler', 'All-Rounder', 'Unassigned'],
-        default: 'Unassigned'
-    },
     isSelfRegistered: {
         type: Boolean,
         default: true
