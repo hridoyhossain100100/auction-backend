@@ -275,16 +275,24 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
     /* === পরিবর্তন শুরু === */
     // ১. category ও imageUrl বাদ দিন, discordUsername যোগ করুন
     const { playerName, discordUsername, basePrice } = req.body; 
-    try {
-        const newPlayer = new Player({
-            playerName,
-            discordUsername, // <-- ২. এখানে ভ্যারিয়েবলটি ব্যবহার করুন
-            basePrice,
-            currentPrice: basePrice,
-            isSelfRegistered: false
-            // category এবং imageUrl পুরোপুরি বাদ দেওয়া হলো
-        });
-    /* === পরিবর্তন শেষ === */
+try {
+    const newPlayer = new Player({
+        playerName,
+        discordUsername,
+        basePrice,
+        currentPrice: basePrice,
+        isSelfRegistered: false
+    }); // <-- এই বন্ধনীটি '}' আপনার কোডে মিসিং ছিলো
+
+    await newPlayer.save(); // <-- প্লেয়ার সেভ করার এই লাইনটিও জরুরি
+
+    broadcastStats(); // <-- এই লাইনগুলোও try ব্লকের ভেতরে থাকবে
+    io.emit('players_updated');
+    res.status(201).json({ message: 'Player created successfully.' });
+
+} catch (error) {
+    res.status(500).json({ message: 'Server error: ' + error.message });
+}
 
         await newPlayer.save();
         
