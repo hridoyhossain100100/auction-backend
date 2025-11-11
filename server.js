@@ -268,22 +268,25 @@ app.get('/api/teams/my-players', authMiddleware, async (req, res) => {
 });
 
 // --- Player Routes ---
+// ...
 app.post('/api/players/create', authMiddleware, async (req, res) => {
-    if (req.user.role !== 'Admin') {
-        return res.status(403).json({ message: 'Access denied. Admins only.' });
-    }
-    const { playerName, category, basePrice, imageUrl } = req.body;
-    try {
-        const newPlayer = new Player({
-            playerName,
-            category,
-            basePrice,
-            currentPrice: basePrice,
-            isSelfRegistered: false,
-            discordUsername: 'N/A (Admin Created)',
-            imageUrl: imageUrl || undefined
-        });
-        await newPlayer.save();
+    // ...
+
+    /* === পরিবর্তন শুরু === */
+    // ১. category ও imageUrl বাদ দিন, discordUsername যোগ করুন
+    const { playerName, discordUsername, basePrice } = req.body; 
+    try {
+        const newPlayer = new Player({
+            playerName,
+            discordUsername, // <-- ২. এখানে ভ্যারিয়েবলটি ব্যবহার করুন
+            basePrice,
+            currentPrice: basePrice,
+            isSelfRegistered: false
+            // category এবং imageUrl পুরোপুরি বাদ দেওয়া হলো
+        });
+    /* === পরিবর্তন শেষ === */
+
+        await newPlayer.save();
         
         broadcastStats();
 
