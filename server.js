@@ -239,6 +239,10 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         owner.team = newTeam._id;
         await owner.save();
         io.emit('teams_updated');
+        
+        // === ❗️❗️ নতুন কোড যোগ করা হলো ===
+        io.emit('users_updated'); 
+        
         res.status(201).json({ message: 'Team created and assigned successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
@@ -273,8 +277,7 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
 
-    // === ❗️❗️ প্রথম সমাধান এখানে (লাইন ৩৫১-৩৮৮) ===
-    // কোডটি পরিষ্কার করা হয়েছে এবং ডুপ্লিকেট কোড মুছে ফেলা হয়েছে
+    // === ❗️❗️ কোডটি ফিক্স করা আছে (Category ছাড়া) ===
     const { playerName, discordUsername, basePrice } = req.body; 
     try {
         const newPlayer = new Player({
@@ -283,7 +286,6 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
             basePrice,
             currentPrice: basePrice,
             isSelfRegistered: false
-            // category এবং imageUrl বাদ দেওয়া হয়েছে
         });
 
         await newPlayer.save(); 
@@ -296,7 +298,7 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
-// === প্রথম সমাধান শেষ ===
+// === সমাধান শেষ ===
 
 
 app.get('/api/players', async (req, res) => {
@@ -466,8 +468,7 @@ app.post('/api/players/self-register', async (req, res) => {
             }
         }
         
-        // === ❗️❗️ দ্বিতীয় সমাধান এখানে (লাইন ৪৬০) ===
-        // 'category' ফিল্ডটি ডিলিট করা হয়েছে
+        // === ❗️❗️ 'category' ফিল্ডটি ডিলিট করা হয়েছে ===
         const newPlayer = new Player({
             playerName,
             discordUsername,
@@ -485,7 +486,7 @@ app.post('/api/players/self-register', async (req, res) => {
         res.status(500).json({ message: 'Server error during registration.' });
     }
 });
-// === দ্বিতীয় সমাধান শেষ ===
+// === সমাধান শেষ ===
 
 
 // ---------------------------------
@@ -548,6 +549,10 @@ app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
 
         // সব ক্লায়েন্টকে আপডেট জানানো
         io.emit('teams_updated');
+
+        // === ❗️❗️ নতুন কোড যোগ করা হলো ===
+        io.emit('users_updated'); 
+
         broadcastStats(); // স্ট্যাটাস আপডেট করা
         io.emit('auction_log', `Admin deleted team: ${team.teamName}`);
         
@@ -557,9 +562,51 @@ app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
     }
 });
 
+// ---------------------------------
+// --- ❗️❗️ নতুন রুট: ইউজার ম্যানেজমেন্ট (অ্যাডমিন) ---
+// ---------------------------------
+
+// === নতুন: আন-অ্যাসাইনড টিম ওনারদের লিস্ট ===
+app.get('/api/users/unassigned', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    try {
+        // সেই সব ইউজারদের খুঁজুন যাদের রোল 'TeamOwner' কিন্তু কোনো 'team' আইডি অ্যাসাইন করা নেই
+        const users = await User.find({
+            role: 'TeamOwner',
+            team: { $exists: false } // যাদের 'team' ফিল্ডটি নেই
+        }).select('username role'); // শুধু ইউজারনেম ও রোল পাঠানো হচ্ছে
+
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error: ' + error.message });
+    }
+});
+
+// === নতুন: ইউজার ডিলিট রুট ===
+app.delete('/api/users/:id', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    try {
+        const user = await User.findByIdAndDelete(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+        
+        io.emit('users_updated'); // সব ক্লায়েন্টকে জানানো যে ইউজার লিস্ট আপডেট হয়েছে
+        io.emit('auction_log', `Admin deleted user: ${user.username}`);
+        
+        res.json({ message: 'User deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error: ' + error.message });
+    }
+});
+
 
 // --- সার্ভার চালু করুন ---
 server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('Socket.io is listening for connections.')
+    console.log('Socket.io is listening for connections.');
 });
