@@ -240,7 +240,6 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         await owner.save();
         io.emit('teams_updated');
         
-        // === ❗️❗️ নতুন কোড যোগ করা হলো ===
         io.emit('users_updated'); 
         
         res.status(201).json({ message: 'Team created and assigned successfully.' });
@@ -277,7 +276,6 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
 
-    // === ❗️❗️ কোডটি ফিক্স করা আছে (Category ছাড়া) ===
     const { playerName, discordUsername, basePrice } = req.body; 
     try {
         const newPlayer = new Player({
@@ -298,7 +296,6 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
-// === সমাধান শেষ ===
 
 
 app.get('/api/players', async (req, res) => {
@@ -356,7 +353,6 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         }
         
         // রুল ৪: মিনিমাম বিড এবং ফিক্সড ইনক্রিমেন্ট ১০?
-        // যদি এটি প্রথম বিড হয়, তবে বেস প্রাইস (২০) বা তার বেশি হতে হবে।
         const minBidAmount = (player.bids.length === 0) ? player.basePrice : (player.currentPrice + 10);
 
         if (bidAmount < minBidAmount) {
@@ -419,9 +415,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
         player.currentPrice = player.basePrice; 
         player.bids = []; 
         
-        // === পরিবর্তন: অ্যাডমিনের সেট করা সময় ব্যবহার করা ===
         player.auctionEndTime = new Date(Date.now() + globalAuctionDuration * 1000);
-        // === পরিবর্তন শেষ ===
         
         await player.save();
 
@@ -489,7 +483,6 @@ app.post('/api/players/self-register', async (req, res) => {
             }
         }
         
-        // === ❗️❗️ 'category' ফিল্ডটি ডিলিট করা হয়েছে ===
         const newPlayer = new Player({
             playerName,
             discordUsername,
@@ -507,7 +500,6 @@ app.post('/api/players/self-register', async (req, res) => {
         res.status(500).json({ message: 'Server error during registration.' });
     }
 });
-// === সমাধান শেষ ===
 
 
 // ---------------------------------
@@ -543,9 +535,8 @@ app.delete('/api/players/:id', authMiddleware, async (req, res) => {
             return res.status(404).json({ message: 'Player not found.' });
         }
         
-        // সব ক্লায়েন্টকে আপডেট জানানো
         io.emit('players_updated');
-        broadcastStats(); // স্ট্যাটাস আপডেট করা
+        broadcastStats(); 
         io.emit('auction_log', `Admin deleted player: ${player.playerName}`);
         
         res.json({ message: 'Player deleted successfully.' });
@@ -565,16 +556,11 @@ app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
             return res.status(404).json({ message: 'Team not found.' });
         }
         
-        // এই টিমের ওনারের কাছ থেকে টিম আইডি মুছে ফেলা
         await User.updateOne({ _id: team.owner }, { $unset: { team: "" } });
 
-        // সব ক্লায়েন্টকে আপডেট জানানো
         io.emit('teams_updated');
-
-        // === ❗️❗️ নতুন কোড যোগ করা হলো ===
         io.emit('users_updated'); 
-
-        broadcastStats(); // স্ট্যাটাস আপডেট করা
+        broadcastStats(); 
         io.emit('auction_log', `Admin deleted team: ${team.teamName}`);
         
         res.json({ message: 'Team deleted successfully.' });
@@ -593,11 +579,10 @@ app.get('/api/users/unassigned', authMiddleware, async (req, res) => {
         return res.status(403).json({ message: 'Access denied.' });
     }
     try {
-        // সেই সব ইউজারদের খুঁজুন যাদের রোল 'TeamOwner' কিন্তু কোনো 'team' আইডি অ্যাসাইন করা নেই
         const users = await User.find({
             role: 'TeamOwner',
-            team: { $exists: false } // যাদের 'team' ফিল্ডটি নেই
-        }).select('username role'); // শুধু ইউজারনেম ও রোল পাঠানো হচ্ছে
+            team: { $exists: false } 
+        }).select('username role'); 
 
         res.json(users);
     } catch (error) {
@@ -616,10 +601,39 @@ app.delete('/api/users/:id', authMiddleware, async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
         
-        io.emit('users_updated'); // সব ক্লায়েন্টকে জানানো যে ইউজার লিস্ট আপডেট হয়েছে
+        io.emit('users_updated'); 
         io.emit('auction_log', `Admin deleted user: ${user.username}`);
         
         res.json({ message: 'User deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error: ' + error.message });
+    }
+});
+
+// ---------------------------------
+// --- ❗️❗️ নতুন: Audience Public Routes ---
+// ---------------------------------
+
+// === নতুন: Public Stats রুট (টোকেন ছাড়া চলবে) ===
+app.get('/api/stats-public', async (req, res) => {
+    try {
+        const [totalPlayers, liveAuctions, playersSold, registeredTeams] = await Promise.all([
+            Player.countDocuments(),
+            Player.countDocuments({ status: 'Ongoing' }),
+            Player.countDocuments({ status: 'Sold' }),
+            Team.countDocuments()
+        ]);
+        res.json({ totalPlayers, liveAuctions, playersSold, registeredTeams });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching stats." });
+    }
+});
+
+// === নতুন: Public Teams রুট (টোকেন ছাড়া চলবে) ===
+app.get('/api/teams-public', async (req, res) => {
+    try {
+        const teams = await Team.find().select('teamName budget');
+        res.json(teams);
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
