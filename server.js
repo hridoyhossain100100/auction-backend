@@ -629,10 +629,14 @@ app.get('/api/stats-public', async (req, res) => {
     }
 });
 
-// === নতুন: Public Teams রুট (টোকেন ছাড়া চলবে) ===
+// === নতুন: Public Teams রুট (টোকেন ছাড়া চলবে এবং প্লেয়ার লিস্ট সহ) ===
 app.get('/api/teams-public', async (req, res) => {
     try {
-        const teams = await Team.find().select('teamName budget');
+        // এখন .populate('playersOwned') যোগ করা হয়েছে
+        const teams = await Team.find()
+            .populate('playersOwned', 'playerName soldAmount') // <-- এই পরিবর্তনটি জরুরি
+            .select('teamName budget playersOwned');
+            
         res.json(teams);
     } catch (error) {
         res.status(500).json({ message: 'Server error: ' + error.message });
