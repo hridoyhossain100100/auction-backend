@@ -22,7 +22,7 @@ const PlayerSchema = new Schema({
     basePrice: {
         type: Number,
         required: false,
-        default: 100 // ডিফল্ট বেস প্রাইস
+        default: 10 // ডিফল্ট বেস প্রাইস
     },
     currentPrice: {
         type: Number,
