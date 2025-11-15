@@ -338,16 +338,37 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
         
-        const minIncrement = Math.max(10, player.currentPrice * 0.05);
-        const minBidAmount = player.currentPrice + minIncrement;
+        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
 
-        if (bidAmount < minBidAmount) {
-            return res.status(400).json({ 
-                error: `Bid must be at least $${minBidAmount.toFixed(0)}. (Current: $${player.currentPrice})` 
-            });
+        // রুল ১: টিম কি ৬ জন প্লেয়ার কিনে ফেলেছে?
+        if (team.playersOwned.length >= 6) {
+            return res.status(400).json({ error: 'Your team is full (6 players max).' });
+        }
+
+        // রুল ২: সর্বোচ্চ বিড ৫০০?
+        if (bidAmount > 500) {
+            return res.status(400).json({ error: 'Maximum bid cap for a single player is 500 tokens.' });
+        }
+
+        // রুল ৩: বিডের অ্যামাউন্ট কি বাজেটের মধ্যে আছে?
+        if (team.budget < bidAmount) {
+            return res.status(400).json({ error: 'Insufficient budget for this bid.' });
         }
         
-        if (team.budget < bidAmount) return res.status(400).json({ error: 'Insufficient budget for this bid.' });
+        // রুল ৪: মিনিমাম বিড এবং ফিক্সড ইনক্রিমেন্ট ১০?
+        // যদি এটি প্রথম বিড হয়, তবে বেস প্রাইস (২০) বা তার বেশি হতে হবে।
+        const minBidAmount = (player.bids.length === 0) ? player.basePrice : (player.currentPrice + 10);
+
+        if (bidAmount < minBidAmount) {
+             return res.status(400).json({ error: `Bid must be at least $${minBidAmount}. (Increment is 10)` });
+        }
+        
+        // রুল ৫: বিডটি কি ১০ এর গুণিতক? (যেমন ২০, ৩০, ৪০)
+        if (bidAmount % 10 !== 0) {
+            return res.status(400).json({ error: `Bid must be in increments of 10 (e.g., 30, 40, 50...).` });
+        }
+        // === রুলস চেক করা শেষ ===
+
 
         const newBid = {
             bidderTeam: team._id,
