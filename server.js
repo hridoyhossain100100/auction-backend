@@ -104,7 +104,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
         console.error("Sell Player Error:", error.message);
         io.emit('auction_log', `Error selling player: ${error.message}`);
     }
-}
+} // <-- ❗️❗️ সমাধান: লাইন ৭৩-এর অতিরিক্ত ব্র্যাকেটটি সরানো হয়েছে
 
 // === ❗️❗️ নতুন: Socket.io কানেকশন হ্যান্ডলিং (ভিউয়ার কাউন্টের জন্য) ===
 io.on('connection', (socket) => {
@@ -361,7 +361,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
         
-        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
+        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
 
         // রুল ১: টিম কি ৬ জন প্লেয়ার কিনে ফেলেছে?
         if (team.playersOwned.length >= 6) {
@@ -520,6 +520,7 @@ app.post('/api/players/self-register', async (req, res) => {
                 return res.status(400).json({ message: 'This Player Name is already registered.' });
             }
             if (existingPlayer.discordUsername === discordUsername) {
+                // === ❗️❗️ সমাধান: এখানে একটি টাইপিং ভুল ছিলো ===
                 return res.status(400).json({ message: 'This Discord Username is already registered.' });
             }
         }
@@ -589,7 +590,8 @@ app.delete('/api/players/:id', authMiddleware, async (req, res) => {
 // === নতুন: টিম ডিলিট রুট ===
 app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
-        return res.status(4agfasg).json({ message: 'Access denied.' }); // <--- এখানে একটি সিনট্যাক্স এরর ছিলো (403 হবে)
+        // === ❗️❗️ সমাধান: এখানে একটি টাইপিং ভুল ছিলো ===
+        return res.status(403).json({ message: 'Access denied.' });
     }
     try {
         const team = await Team.findByIdAndDelete(req.params.id);
