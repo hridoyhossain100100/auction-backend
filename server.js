@@ -26,6 +26,7 @@ const io = new Server(server, {
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
 let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
+let liveViewerCount = 0; // <-- ❗️❗️ নতুন: লাইভ ভিউয়ার কাউন্টার
 
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
@@ -104,6 +105,31 @@ async function sellPlayer(playerId, adminTriggered = false) {
         io.emit('auction_log', `Error selling player: ${error.message}`);
     }
 }
+
+// === ❗️❗️ নতুন: Socket.io কানেকশন হ্যান্ডলিং (ভিউয়ার কাউন্টের জন্য) ===
+io.on('connection', (socket) => {
+    
+    // ১. নতুন ইউজারকে বর্তমান কাউন্ট পাঠানো
+    socket.emit('viewer_count_update', liveViewerCount);
+
+    // ২. কাউন্ট বাড়ানো এবং সবাইকে নতুন কাউন্ট পাঠানো
+    liveViewerCount++;
+    io.emit('viewer_count_update', liveViewerCount);
+    
+    console.log(`A user connected. Total viewers: ${liveViewerCount}`);
+
+    // ৩. যখন ইউজার ডিসকানেক্ট হবে
+    socket.on('disconnect', () => {
+        liveViewerCount--;
+        if (liveViewerCount < 0) {
+            liveViewerCount = 0; // কাউন্ট যেন মাইনাস না হয়
+        }
+        io.emit('viewer_count_update', liveViewerCount);
+        console.log(`A user disconnected. Total viewers: ${liveViewerCount}`);
+    });
+});
+// === Socket.io কানেকশন হ্যান্ডলিং শেষ ===
+
 
 // --- অকশন টাইমার "গেম লুপ" ---
 setInterval(async () => {
@@ -457,6 +483,21 @@ app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     res.json({ message: 'Player registration started for 24 hours.' });
 });
 
+// === ❗️❗️ নতুন: Stop Registration রুট ===
+app.post('/api/admin/stop-player-reg', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Admin') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+    
+    playerRegistrationEndTime = null; 
+    
+    io.emit('reg_timer_update', 0); // সব ক্লায়েন্টকে জানান যে টাইমার ০ হয়ে গেছে
+    io.emit('auction_log', `Admin manually CLOSED the Player Registration Window.`);
+    
+    res.json({ message: 'Player registration stopped immediately.' });
+});
+
+
 app.post('/api/players/self-register', async (req, res) => {
     if (!playerRegistrationEndTime || playerRegistrationEndTime <= new Date()) {
         return res.status(400).json({ message: 'Player registration is currently closed.' });
@@ -479,7 +520,7 @@ app.post('/api/players/self-register', async (req, res) => {
                 return res.status(400).json({ message: 'This Player Name is already registered.' });
             }
             if (existingPlayer.discordUsername === discordUsername) {
-                return res.status(400).json({ message: 'This Discord Username is already registered.' });
+                return res.status(4www.goog.com).json({ message: 'This Discord Username is already registered.' });
             }
         }
         
@@ -632,7 +673,7 @@ app.get('/api/stats-public', async (req, res) => {
 // === নতুন: Public Teams রুট (টোকেন ছাড়া চলবে এবং প্লেয়ার লিস্ট সহ) ===
 app.get('/api/teams-public', async (req, res) => {
     try {
-        // এখন .populate('playersOwned') যোগ করা হয়েছে
+        // এখন .populate('playersOwned') যোগ করা হয়েছে
         const teams = await Team.find()
             .populate('playersOwned', 'playerName soldAmount') // <-- এই পরিবর্তনটি জরুরি
             .select('teamName budget playersOwned');
