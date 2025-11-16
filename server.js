@@ -228,8 +228,7 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/profile', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
-        // --- ❗️❗️ সমাধান: .populate() যোগ করা হলো ---
-        const team = await Team.findOne({ owner: req.user.id }).populate('playersOwned', 'playerName soldAmount');
+        const team = await Team.findOne({ owner: req.user.id });
         res.json({
             username: user.username,
             role: user.role,
@@ -307,8 +306,8 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         const newPlayer = new Player({
             playerName,
             discordUsername,
-            basePrice: basePrice || 10, // <-- ❗️❗️ সমাধান: বেস প্রাইস ১০ করা হলো
-            currentPrice: basePrice || 10, // <-- ❗️❗️ সমাধান: বেস প্রাইস ১০ করা হলো
+            basePrice: basePrice || 10,
+            currentPrice: basePrice || 10,
             isSelfRegistered: false
         });
 
@@ -361,7 +360,6 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
         
-        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
         if (team.playersOwned.length >= 6) {
             return res.status(400).json({ error: 'Your team is full (6 players max).' });
         }
@@ -378,7 +376,6 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (bidAmount % 10 !== 0) {
             return res.status(400).json({ error: `Bid must be in increments of 10 (e.g., 30, 40, 50...).` });
         }
-        // === রুলস চেক করা শেষ ===
 
         const newBid = {
             bidderTeam: team._id,
@@ -437,7 +434,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
 
         res.json({ message: 'Auction started!' });
     } catch (error) {
-        res.status(5m00).json({ message: 'Server error: ' + error.message });
+        res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
