@@ -26,7 +26,7 @@ const io = new Server(server, {
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
 let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
-let liveViewerCount = 0; // <-- ❗️❗️ নতুন: লাইভ ভিউয়ার কাউন্টার
+let liveViewerCount = 0; // <-- ❗️❗️ নতুন: লাইভ ভিউয়ার কাউন্টার
 
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
 const JWT_SECRET = "your_secret_key_123";
@@ -106,13 +106,13 @@ async function sellPlayer(playerId, adminTriggered = false) {
     }
 }
 
-// === ❗️❗️ নতুন: Socket.io কানেকশন হ্যান্ডলিং (ভিউয়ার কাউন্টের জন্য) ===
+// === ❗️❗️ নতুন: Socket.io কানেকশন হ্যান্ডলিং (ভিউয়ার কাউন্টের জন্য) ===
 io.on('connection', (socket) => {
     
     // ১. নতুন ইউজারকে বর্তমান কাউন্ট পাঠানো
     socket.emit('viewer_count_update', liveViewerCount);
 
-    // ২. কাউন্ট বাড়ানো এবং সবাইকে নতুন কাউন্ট পাঠানো
+    // ২. কাউন্ট বাড়ানো এবং সবাইকে নতুন কাউন্ট পাঠানো
     liveViewerCount++;
     io.emit('viewer_count_update', liveViewerCount);
     
@@ -122,7 +122,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         liveViewerCount--;
         if (liveViewerCount < 0) {
-            liveViewerCount = 0; // কাউন্ট যেন মাইনাস না হয়
+            liveViewerCount = 0; // কাউন্ট যেন মাইনাস না হয়
         }
         io.emit('viewer_count_update', liveViewerCount);
         console.log(`A user disconnected. Total viewers: ${liveViewerCount}`);
@@ -520,7 +520,7 @@ app.post('/api/players/self-register', async (req, res) => {
                 return res.status(400).json({ message: 'This Player Name is already registered.' });
             }
             if (existingPlayer.discordUsername === discordUsername) {
-                return res.status(4www.goog.com).json({ message: 'This Discord Username is already registered.' });
+                return res.status(400).json({ message: 'This Discord Username is already registered.' });
             }
         }
         
@@ -589,7 +589,7 @@ app.delete('/api/players/:id', authMiddleware, async (req, res) => {
 // === নতুন: টিম ডিলিট রুট ===
 app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
-        return res.status(403).json({ message: 'Access denied.' });
+        return res.status(4agfasg).json({ message: 'Access denied.' }); // <--- এখানে একটি সিনট্যাক্স এরর ছিলো (403 হবে)
     }
     try {
         const team = await Team.findByIdAndDelete(req.params.id);
