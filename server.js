@@ -25,7 +25,7 @@ const io = new Server(server, {
 
 // --- গ্লোবাল অকশন স্টেট ---
 let playerRegistrationEndTime = null;
-let globalAuctionDuration = 30; // <-- নতুন: নিলামের ডিফল্ট সময় (সেকেন্ডে)
+let globalAuctionDuration = 30; 
 let liveViewerCount = 0; // <-- ❗️❗️ নতুন: লাইভ ভিউয়ার কাউন্টার
 
 const MONGO_URI = "mongodb+srv://auction_admin:auction_admin123@cluster0.tkszoeu.mongodb.net/?appName=Cluster0";
@@ -104,7 +104,7 @@ async function sellPlayer(playerId, adminTriggered = false) {
         console.error("Sell Player Error:", error.message);
         io.emit('auction_log', `Error selling player: ${error.message}`);
     }
-} // <-- ❗️❗️ সমাধান: লাইন ৭৩-এর অতিরিক্ত ব্র্যাকেটটি সরানো হয়েছে
+}
 
 // === ❗️❗️ নতুন: Socket.io কানেকশন হ্যান্ডলিং (ভিউয়ার কাউন্টের জন্য) ===
 io.on('connection', (socket) => {
@@ -228,7 +228,8 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/profile', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
-        const team = await Team.findOne({ owner: req.user.id });
+        // --- ❗️❗️ সমাধান: .populate() যোগ করা হলো ---
+        const team = await Team.findOne({ owner: req.user.id }).populate('playersOwned', 'playerName soldAmount');
         res.json({
             username: user.username,
             role: user.role,
@@ -265,7 +266,6 @@ app.post('/api/teams/create', authMiddleware, async (req, res) => {
         owner.team = newTeam._id;
         await owner.save();
         io.emit('teams_updated');
-        
         io.emit('users_updated'); 
         
         res.status(201).json({ message: 'Team created and assigned successfully.' });
@@ -307,8 +307,8 @@ app.post('/api/players/create', authMiddleware, async (req, res) => {
         const newPlayer = new Player({
             playerName,
             discordUsername,
-            basePrice,
-            currentPrice: basePrice,
+            basePrice: basePrice || 10, // <-- ❗️❗️ সমাধান: বেস প্রাইস ১০ করা হলো
+            currentPrice: basePrice || 10, // <-- ❗️❗️ সমাধান: বেস প্রাইস ১০ করা হলো
             isSelfRegistered: false
         });
 
@@ -361,36 +361,24 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
         
-        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
-
-        // রুল ১: টিম কি ৬ জন প্লেয়ার কিনে ফেলেছে?
+        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
         if (team.playersOwned.length >= 6) {
             return res.status(400).json({ error: 'Your team is full (6 players max).' });
         }
-
-        // রুল ২: সর্বোচ্চ বিড ৫০০?
         if (bidAmount > 500) {
             return res.status(400).json({ error: 'Maximum bid cap for a single player is 500 tokens.' });
         }
-
-        // রুল ৩: বিডের অ্যামাউন্ট কি বাজেটের মধ্যে আছে?
         if (team.budget < bidAmount) {
             return res.status(400).json({ error: 'Insufficient budget for this bid.' });
         }
-        
-        // রুল ৪: মিনিমাম বিড এবং ফিক্সড ইনক্রিমেন্ট ১০?
         const minBidAmount = (player.bids.length === 0) ? player.basePrice : (player.currentPrice + 10);
-
         if (bidAmount < minBidAmount) {
              return res.status(400).json({ error: `Bid must be at least $${minBidAmount}. (Increment is 10)` });
         }
-        
-        // রুল ৫: বিডটি কি ১০ এর গুণিতক? (যেমন ২০, ৩০, ৪০)
         if (bidAmount % 10 !== 0) {
             return res.status(400).json({ error: `Bid must be in increments of 10 (e.g., 30, 40, 50...).` });
         }
         // === রুলস চেক করা শেষ ===
-
 
         const newBid = {
             bidderTeam: team._id,
@@ -401,12 +389,9 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         player.currentPrice = bidAmount;
 
         const timeLeft = Math.round((new Date(player.auctionEndTime).getTime() - Date.now()) / 1000);
-        
-        // (আগের কোড অনুযায়ী ১০ সেকেন্ডে রিসেট)
         if (timeLeft < 10) {
              player.auctionEndTime = new Date(Date.now() + 10 * 1000);
         }
-
         await player.save();
 
         io.emit('players_updated');
@@ -491,7 +476,7 @@ app.post('/api/admin/stop-player-reg', authMiddleware, async (req, res) => {
     
     playerRegistrationEndTime = null; 
     
-    io.emit('reg_timer_update', 0); // সব ক্লায়েন্টকে জানান যে টাইমার ০ হয়ে গেছে
+    io.emit('reg_timer_update', 0); 
     io.emit('auction_log', `Admin manually CLOSED the Player Registration Window.`);
     
     res.json({ message: 'Player registration stopped immediately.' });
@@ -520,7 +505,6 @@ app.post('/api/players/self-register', async (req, res) => {
                 return res.status(400).json({ message: 'This Player Name is already registered.' });
             }
             if (existingPlayer.discordUsername === discordUsername) {
-                // === ❗️❗️ সমাধান: এখানে একটি টাইপিং ভুল ছিলো ===
                 return res.status(400).json({ message: 'This Discord Username is already registered.' });
             }
         }
@@ -530,6 +514,7 @@ app.post('/api/players/self-register', async (req, res) => {
             discordUsername,
             isSelfRegistered: true,
             imageUrl: imageUrl || undefined
+            // basePrice ডিফল্ট (10) হয়ে যাবে (Player.js থেকে)
         });
         await newPlayer.save();
         
@@ -548,13 +533,12 @@ app.post('/api/players/self-register', async (req, res) => {
 // --- নতুন রুট: অ্যাডমিন সেটিংস, প্লেয়ার ও টিম ডিলিট ---
 // ---------------------------------
 
-// === নতুন: অকশন সেটিংস রুট ===
 app.post('/api/admin/settings', authMiddleware, (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
     }
     const { duration } = req.body;
-    if (duration && !isNaN(duration) && duration > 5) { // কমপক্ষে ৫ সেকেন্ড
+    if (duration && !isNaN(duration) && duration > 5) { 
         globalAuctionDuration = parseInt(duration, 10);
         console.log(`Auction duration set to: ${globalAuctionDuration} seconds`);
         
@@ -566,7 +550,6 @@ app.post('/api/admin/settings', authMiddleware, (req, res) => {
     }
 });
 
-// === নতুন: প্লেয়ার ডিলিট রুট ===
 app.delete('/api/players/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -587,10 +570,8 @@ app.delete('/api/players/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// === নতুন: টিম ডিলিট রুট ===
 app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
-        // === ❗️❗️ সমাধান: এখানে একটি টাইপিং ভুল ছিলো ===
         return res.status(403).json({ message: 'Access denied.' });
     }
     try {
@@ -616,7 +597,6 @@ app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
 // --- ❗️❗️ নতুন রুট: ইউজার ম্যানেজমেন্ট (অ্যাডমিন) ---
 // ---------------------------------
 
-// === নতুন: আন-অ্যাসাইনড টিম ওনারদের লিস্ট ===
 app.get('/api/users/unassigned', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -633,7 +613,6 @@ app.get('/api/users/unassigned', authMiddleware, async (req, res) => {
     }
 });
 
-// === নতুন: ইউজার ডিলিট রুট ===
 app.delete('/api/users/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -657,7 +636,6 @@ app.delete('/api/users/:id', authMiddleware, async (req, res) => {
 // --- ❗️❗️ নতুন: Audience Public Routes ---
 // ---------------------------------
 
-// === নতুন: Public Stats রুট (টোকেন ছাড়া চলবে) ===
 app.get('/api/stats-public', async (req, res) => {
     try {
         const [totalPlayers, liveAuctions, playersSold, registeredTeams] = await Promise.all([
@@ -672,12 +650,10 @@ app.get('/api/stats-public', async (req, res) => {
     }
 });
 
-// === নতুন: Public Teams রুট (টোকেন ছাড়া চলবে এবং প্লেয়ার লিস্ট সহ) ===
 app.get('/api/teams-public', async (req, res) => {
     try {
-        // এখন .populate('playersOwned') যোগ করা হয়েছে
         const teams = await Team.find()
-            .populate('playersOwned', 'playerName soldAmount') // <-- এই পরিবর্তনটি জরুরি
+            .populate('playersOwned', 'playerName soldAmount') 
             .select('teamName budget playersOwned');
             
         res.json(teams);
