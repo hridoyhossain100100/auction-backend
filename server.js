@@ -79,9 +79,13 @@ async function sellPlayer(playerId, adminTriggered = false) {
             if (winningTeam.budget < soldPrice && !adminTriggered) {
                 throw new Error(`Team ${winningTeam.teamName} has insufficient budget!`);
             }
-            if (!adminTriggered) {
-                winningTeam.budget -= soldPrice;
-            }
+            
+            // === ❗️❗️ সমাধান: বাজেট কমানোর লজিকটি ঠিক করা হলো ===
+            // if (!adminTriggered) { // <-- এই ভুল কন্ডিশনটি ডিলিট করা হয়েছে
+            winningTeam.budget -= soldPrice;
+            // } // <-- এই ভুল কন্ডিশনটি ডিলিট করা হয়েছে
+            // === সমাধান শেষ ===
+            
             winningTeam.playersOwned.push(playerId);
             await winningTeam.save();
 
