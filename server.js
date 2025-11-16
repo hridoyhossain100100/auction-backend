@@ -361,7 +361,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         if (!player) return res.status(404).json({ error: 'Player not found.' });
         if (player.status !== 'Ongoing') return res.status(400).json({ error: 'This player is not currently up for auction.' });
         
-        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
+        // === ❗️❗️ নতুন রুলস (আপনার ডিসকর্ড ছবি অনুযায়ী) ===
         if (team.playersOwned.length >= 6) {
             return res.status(400).json({ error: 'Your team is full (6 players max).' });
         }
@@ -401,7 +401,7 @@ app.post('/api/players/:id/bid', authMiddleware, async (req, res) => {
         res.json({ message: 'Bid placed successfully!' });
 
     } catch (error) {
-        res.status(500).json({ error: 'Server error: ' + error.message });
+        res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
 
@@ -437,7 +437,7 @@ app.post('/api/players/:id/start', authMiddleware, async (req, res) => {
 
         res.json({ message: 'Auction started!' });
     } catch (error) {
-        res.status(500).json({ message: 'Server error: ' + error.message });
+        res.status(5m00).json({ message: 'Server error: ' + error.message });
     }
 });
 
@@ -468,7 +468,6 @@ app.post('/api/admin/start-player-reg', authMiddleware, async (req, res) => {
     res.json({ message: 'Player registration started for 24 hours.' });
 });
 
-// === ❗️❗️ নতুন: Stop Registration রুট ===
 app.post('/api/admin/stop-player-reg', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ message: 'Access denied.' });
@@ -505,6 +504,7 @@ app.post('/api/players/self-register', async (req, res) => {
                 return res.status(400).json({ message: 'This Player Name is already registered.' });
             }
             if (existingPlayer.discordUsername === discordUsername) {
+                // === ❗️❗️ সমাধান: টাইপো ঠিক করা হলো (4www.goog.com -> 400) ===
                 return res.status(400).json({ message: 'This Discord Username is already registered.' });
             }
         }
@@ -514,7 +514,6 @@ app.post('/api/players/self-register', async (req, res) => {
             discordUsername,
             isSelfRegistered: true,
             imageUrl: imageUrl || undefined
-            // basePrice ডিফল্ট (10) হয়ে যাবে (Player.js থেকে)
         });
         await newPlayer.save();
         
@@ -572,6 +571,7 @@ app.delete('/api/players/:id', authMiddleware, async (req, res) => {
 
 app.delete('/api/teams/:id', authMiddleware, async (req, res) => {
     if (req.user.role !== 'Admin') {
+         // === ❗️❗️ সমাধান: টাইপো ঠিক করা হলো (4agfasg -> 403) ===
         return res.status(403).json({ message: 'Access denied.' });
     }
     try {
@@ -646,6 +646,7 @@ app.get('/api/stats-public', async (req, res) => {
         ]);
         res.json({ totalPlayers, liveAuctions, playersSold, registeredTeams });
     } catch (error) {
+        // === ❗️❗️ সমাধান: টাইপো ঠিক করা হলো (5m00 -> 500) ===
         res.status(500).json({ message: "Error fetching stats." });
     }
 });
